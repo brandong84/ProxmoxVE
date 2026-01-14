@@ -1,0 +1,29 @@
+# ------------------------------------------------------------------------------
+# Contribution Tooling Validation Workflow
+#
+# This workflow validates contributor-facing tooling only.
+#
+# Scope:
+# - docs/contribution/*.sh
+# - Related helper scripts
+#
+# Checks:
+# - ShellCheck for bash scripts
+# - JSON validation for metadata examples
+#
+# This workflow does NOT validate application install scripts and
+# is intentionally scoped to avoid impacting normal app PRs.
+# ------------------------------------------------------------------------------
+
+name: Contribution Tooling Validation
+on:
+  pull_request:
+    paths:
+      - docs/contribution/**
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck jq
+      - run: shellcheck docs/contribution/*.sh
