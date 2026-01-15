@@ -163,7 +163,7 @@
 set -Eeuo pipefail
 
 # ─────────────────────────────────────────────
-# Logging helpers (community-scripts style)
+# Logging helpers
 # ─────────────────────────────────────────────
 msg_info()  { echo -e "\e[34m[INFO]\e[0m $*"; }
 msg_ok()    { echo -e "\e[32m[OK]\e[0m $*"; }
@@ -196,7 +196,7 @@ ask() {
 # ─────────────────────────────────────────────
 # Preconditions
 # ─────────────────────────────────────────────
-[[ -d .git ]] || msg_error "Must be run from repository root"
+[[ -d .git ]] || msg_error "Run from repository root"
 
 ORIGIN_URL="$(git remote get-url origin)"
 [[ "$ORIGIN_URL" =~ github.com[:/](.+)/([^/]+)(\.git)?$ ]] \
@@ -223,7 +223,7 @@ git checkout -b "$FEATURE_BRANCH"
 msg_ok "Created branch $FEATURE_BRANCH"
 
 # ─────────────────────────────────────────────
-# Project layout
+# Paths
 # ─────────────────────────────────────────────
 case "$PROJECT_TYPE" in
   ct)
@@ -253,20 +253,18 @@ DEST_SCRIPT="$DEST_DIR/${APP_SLUG}.sh"
 INSTALL_SCRIPT="$INSTALL_DIR/${APP_SLUG}-install.sh"
 
 # ─────────────────────────────────────────────
-# Template resolution
+# Template lookup (SAFE)
 # ─────────────────────────────────────────────
 TEMPLATE_DIR="docs/contribution/templates_${PROJECT_TYPE}"
 
-get_template() {
-  local file="$1"
-  [[ -f "$TEMPLATE_DIR/$file" ]] && echo "$TEMPLATE_DIR/$file"
-}
+SRC_MAIN=""
+SRC_INSTALL=""
 
-SRC_MAIN="$(get_template example.sh)"
-SRC_INSTALL="$(get_template example-install.sh)"
+[[ -f "$TEMPLATE_DIR/example.sh" ]] && SRC_MAIN="$TEMPLATE_DIR/example.sh"
+[[ -f "$TEMPLATE_DIR/example-install.sh" ]] && SRC_INSTALL="$TEMPLATE_DIR/example-install.sh"
 
 # ─────────────────────────────────────────────
-# Copyright header
+# Header
 # ─────────────────────────────────────────────
 YEAR="$(date +%Y)"
 HEADER="#
@@ -278,14 +276,14 @@ HEADER="#
 "
 
 # ─────────────────────────────────────────────
-# Main script generation
+# Main script
 # ─────────────────────────────────────────────
 if [[ -n "$SRC_MAIN" ]]; then
   msg_ok "Using template: $SRC_MAIN"
   cp "$SRC_MAIN" "$DEST_SCRIPT"
 else
-  msg_warn "No template found for $PROJECT_TYPE — generating skeleton"
-  cat << 'EOF' > "$DEST_SCRIPT"
+  msg_warn "No template found — generating skeleton"
+  cat > "$DEST_SCRIPT" << 'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -296,7 +294,7 @@ msg_error() { echo "[ERROR] $*" >&2; exit 1; }
 msg_info "Starting setup"
 
 # TODO:
-# - Follow docs/README.md structure
+# - Follow docs/README.md
 # - Add dependency checks
 # - Implement install/update logic
 
@@ -308,15 +306,15 @@ sed -i "1s|^|$HEADER\n|" "$DEST_SCRIPT"
 chmod +x "$DEST_SCRIPT"
 
 # ─────────────────────────────────────────────
-# Install script (ct only)
+# Install script (ct)
 # ─────────────────────────────────────────────
 if [[ "$PROJECT_TYPE" == "ct" ]]; then
   if [[ -n "$SRC_INSTALL" ]]; then
-    msg_ok "Using install template: $SRC_INSTALL"
+    msg_ok "Using install template"
     cp "$SRC_INSTALL" "$INSTALL_SCRIPT"
   else
-    msg_warn "No install template found — generating skeleton"
-    cat << 'EOF' > "$INSTALL_SCRIPT"
+    msg_warn "No install template — generating skeleton"
+    cat > "$INSTALL_SCRIPT" << 'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -329,7 +327,6 @@ msg_info "Installing application"
 # TODO:
 # - Install dependencies
 # - Configure services
-# - Enable auto-start
 
 msg_ok "Install complete"
 EOF
@@ -340,7 +337,7 @@ EOF
 fi
 
 # ─────────────────────────────────────────────
-# Fork-based testing URL rewrite
+# Fork URL rewrite
 # ─────────────────────────────────────────────
 RAW_FORK="https://raw.githubusercontent.com/$GITHUB_USER/$FORK_REPO/$FEATURE_BRANCH"
 
@@ -348,12 +345,12 @@ sed -i \
   -e "s|https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main|$RAW_FORK|g" \
   misc/build.func misc/install.func "$DEST_SCRIPT" 2>/dev/null || true
 
-msg_ok "Fork URLs applied for local testing"
+msg_ok "Fork URLs applied for testing"
 
 # ─────────────────────────────────────────────
 # JSON metadata
 # ─────────────────────────────────────────────
-cat << EOF > "json/${APP_SLUG}.json"
+cat > "json/${APP_SLUG}.json" << EOF
 {
   "name": "${APP_NAME}",
   "slug": "${APP_SLUG}",
@@ -365,21 +362,11 @@ cat << EOF > "json/${APP_SLUG}.json"
 }
 EOF
 
-# ─────────────────────────────────────────────
-# Optional validation
-# ─────────────────────────────────────────────
-command -v shellcheck >/dev/null && shellcheck "$DEST_SCRIPT" || true
-command -v jq >/dev/null && jq . "json/${APP_SLUG}.json" >/dev/null || true
-
-# ─────────────────────────────────────────────
-# Final output
-# ─────────────────────────────────────────────
-msg_ok "Contribution project initialized successfully"
+msg_ok "Project files created"
 
 echo
 echo "Next steps:"
-echo "  Test:        bash $DEST_SCRIPT"
-echo "  Cleanup:     bash docs/contribution/restore-upstream.sh"
-echo "  Commit:      git add . && git commit"
+echo "  Test:    bash $DEST_SCRIPT"
+echo "  Cleanup: bash docs/contribution/restore-upstream.sh"
+echo "  Commit:  git add . && git commit"
 echo
-
