@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ################################################################################
 # ProxmoxVE Contribution Project Setup Script
@@ -160,213 +160,255 @@
 # See docs/contribution/CONTRIBUTING.md for full workflow.
 ################################################################################
 
-set -Eeuo pipefail
+
+
+################################################################################
+# ProxmoxVE Contribution Project Setup Script
+#
+# Creates a new contribution scaffold in a forked ProxmoxVE repository.
+# Must be run AFTER docs/contribution/setup-fork.sh
+################################################################################
+
+#!/usr/bin/env bash
+
+################################################################################
+# ProxmoxVE Contribution Project Setup Script
+#
+# Creates a new contribution scaffold in a forked ProxmoxVE repository.
+# Must be run AFTER docs/contribution/setup-fork.sh
+################################################################################
+
+set -u
+IFS=$'\n\t'
 
 # ─────────────────────────────────────────────
-# Logging helpers
+# Logging
 # ─────────────────────────────────────────────
 msg_info()  { echo -e "\e[34m[INFO]\e[0m $*"; }
 msg_ok()    { echo -e "\e[32m[OK]\e[0m $*"; }
 msg_warn()  { echo -e "\e[33m[WARN]\e[0m $*"; }
-msg_error() { echo -e "\e[31m[ERROR]\e[0m $*" >&2; exit 1; }
+msg_error() { echo -e "\e[31m[ERROR]\e[0m $*" >&2; }
+fatal() { msg_error "$1"; exit 1; }
 
 # ─────────────────────────────────────────────
-# Argument parsing
+# Helpers
 # ─────────────────────────────────────────────
-APP_NAME=""
-PROJECT_TYPE=""
-AUTO_YES=false
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --app)  APP_NAME="$2"; shift 2 ;;
-    --type) PROJECT_TYPE="$2"; shift 2 ;;
-    --yes)  AUTO_YES=true; shift ;;
-    *) msg_error "Unknown argument: $1" ;;
-  esac
-done
+to_slug() { echo "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9'; }
+to_camel() { sed 's/\b\(.\)/\u\1/g' <<<"$1"; }
 
 ask() {
-  local prompt="$1" default="$2"
-  $AUTO_YES && { echo "$default"; return; }
+  local var="$1" prompt="$2" default="$3"
   read -rp "$prompt [$default]: " input
-  echo "${input:-$default}"
+  eval "$var=\"${input:-$default}\""
+}
+
+safe_copy_or_create() {
+  local src="$1" dest="$2" header="$3"
+  if [[ -f "$src" ]]; then
+    cp "$src" "$dest"
+  else
+    echo "$header" > "$dest"
+  fi
+}
+
+replace_placeholders() {
+  local file="$1"
+  [[ -f "$file" ]] || return
+  sed -i \
+    -e "s/AppName/${APP_NAME}/g" \
+    -e "s/appname/${APP_SLUG}/g" \
+    "$file"
+}
+
+rewrite_fork_urls() {
+  local file="$1"
+  [[ -f "$file" ]] || return
+  sed -i "s|raw.githubusercontent.com/community-scripts/ProxmoxVE/main|$RAW_FORK|g" "$file"
+}
+
+# ─────────────────────────────────────────────
+# JSON helpers
+# ─────────────────────────────────────────────
+update_json_field() {
+  local f="$1" k="$2" v="$3"
+  [[ -z "$v" ]] && return
+  if grep -q "\"$k\"" "$f"; then
+    sed -i "s|\"$k\"[[:space:]]*:[[:space:]]*[^,]*|\"$k\": $v|" "$f"
+  else
+    sed -i "s|{|\{\n  \"$k\": $v,|" "$f"
+  fi
+}
+
+update_json_string() {
+  update_json_field "$1" "$2" "\"$3\""
+}
+
+update_json_array() {
+  update_json_field "$1" "$2" "[$3]"
+}
+
+update_json_object() {
+  update_json_field "$1" "$2" "$3"
+}
+
+generate_install_methods() {
+  local path="$1"
+  cat <<EOF
+[
+  {
+    "type": "default",
+    "script": "$path",
+    "resources": {
+      "cpu": 2,
+      "ram": 2048,
+      "hdd": 4,
+      "os": "debian",
+      "version": "12"
+    }
+  }
+]
+EOF
 }
 
 # ─────────────────────────────────────────────
 # Preconditions
 # ─────────────────────────────────────────────
-[[ -d .git ]] || msg_error "Run from repository root"
+[[ -d .git ]] || fatal "Run from repository root"
 
-ORIGIN_URL="$(git remote get-url origin)"
-[[ "$ORIGIN_URL" =~ github.com[:/](.+)/([^/]+)(\.git)?$ ]] \
-  || msg_error "Unable to detect GitHub fork"
+ORIGIN="$(git remote get-url origin)"
+[[ "$ORIGIN" =~ github.com[:/](.+)/([^/]+)(\.git)?$ ]] || fatal "Cannot detect fork"
 
 GITHUB_USER="${BASH_REMATCH[1]}"
-FORK_REPO="${BASH_REMATCH[2]}"
-
-msg_info "Detected fork: $GITHUB_USER/$FORK_REPO"
+REPO="${BASH_REMATCH[2]}"
 
 # ─────────────────────────────────────────────
-# Interactive input
+# Prompts
 # ─────────────────────────────────────────────
-APP_NAME="${APP_NAME:-$(ask 'Application name' '')}"
-PROJECT_TYPE="${PROJECT_TYPE:-$(ask 'Project type (ct/vm/pve/addon)' 'ct')}"
-AUTHOR="$(ask 'Author name' "$(git config user.name)")"
+DEFAULT_AUTHOR="$(to_camel "$(git config user.name || echo Unknown)")"
 
-[[ -z "$APP_NAME" ]] && msg_error "Application name is required"
+ask APP_NAME "Application Name" ""
+ask PROJECT_TYPE "Type (ct/vm/pve/addon)" "ct"
+ask AUTHOR "Author Name" "$DEFAULT_AUTHOR"
+ask DESCRIPTION "Description" "$APP_NAME application"
+ask VERSION "Version" "latest"
+ask PORT "Interface port (optional)" ""
+ask WEBSITE "Website (optional)" ""
+ask LOGO "Logo URL (optional)" ""
+ask DOCUMENTATION "Documentation URL (optional)" ""
+ask CATEGORIES "Category IDs (comma separated)" "0"
+ask PRIVILEGED "Privileged container? (true/false)" "false"
 
-APP_SLUG="$(echo "$APP_NAME" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
-FEATURE_BRANCH="feat/${APP_SLUG}-${PROJECT_TYPE}"
+[[ -z "$APP_NAME" ]] && fatal "Application name required"
 
-git checkout -b "$FEATURE_BRANCH"
-msg_ok "Created branch $FEATURE_BRANCH"
+APP_SLUG="$(to_slug "$APP_NAME")"
+DATE_CREATED="$(date +%Y-%m-%d)"
 
 # ─────────────────────────────────────────────
-# Paths
+# Branch
+# ─────────────────────────────────────────────
+BRANCH="feat/${APP_SLUG}-${PROJECT_TYPE}"
+git checkout -b "$BRANCH" 2>/dev/null || true
+RAW_FORK="https://raw.githubusercontent.com/$GITHUB_USER/$REPO/$BRANCH"
+
+# ─────────────────────────────────────────────
+# Type mapping
 # ─────────────────────────────────────────────
 case "$PROJECT_TYPE" in
   ct)
-    DEST_DIR="ct"
-    INSTALL_DIR="install"
+    DEST="ct"
+    INSTALL="install"
+    TEMPLATE="docs/contribution/templates_ct/AppName.sh"
+    INSTALL_TEMPLATE="docs/contribution/templates_install/AppName-install.sh"
+    SCRIPT_PATH="ct/${APP_SLUG}.sh"
     ;;
   vm)
-    DEST_DIR="vm"
-    INSTALL_DIR=""
+    DEST="vm"
+    TEMPLATE="docs/contribution/templates_vm/AppName.sh"
+    SCRIPT_PATH="vm/${APP_SLUG}.sh"
     ;;
   pve)
-    DEST_DIR="tools/pve"
-    INSTALL_DIR=""
+    DEST="tools/pve"
+    TEMPLATE="docs/contribution/templates_pve/AppName.sh"
+    SCRIPT_PATH="tools/pve/${APP_SLUG}.sh"
     ;;
   addon)
-    DEST_DIR="tools/addon"
-    INSTALL_DIR=""
+    DEST="tools/addon"
+    TEMPLATE="docs/contribution/templates_addon/AppName.sh"
+    SCRIPT_PATH="tools/addon/${APP_SLUG}.sh"
     ;;
-  *)
-    msg_error "Unsupported project type: $PROJECT_TYPE"
-    ;;
+  *) fatal "Invalid type" ;;
 esac
 
-mkdir -p "$DEST_DIR" "$INSTALL_DIR" json
-
-DEST_SCRIPT="$DEST_DIR/${APP_SLUG}.sh"
-INSTALL_SCRIPT="$INSTALL_DIR/${APP_SLUG}-install.sh"
+mkdir -p "$DEST" json "${INSTALL:-}"
 
 # ─────────────────────────────────────────────
-# Template lookup (SAFE)
+# Headers
 # ─────────────────────────────────────────────
-TEMPLATE_DIR="docs/contribution/templates_${PROJECT_TYPE}"
-
-SRC_MAIN=""
-SRC_INSTALL=""
-
-[[ -f "$TEMPLATE_DIR/example.sh" ]] && SRC_MAIN="$TEMPLATE_DIR/example.sh"
-[[ -f "$TEMPLATE_DIR/example-install.sh" ]] && SRC_INSTALL="$TEMPLATE_DIR/example-install.sh"
-
-# ─────────────────────────────────────────────
-# Header
-# ─────────────────────────────────────────────
-YEAR="$(date +%Y)"
-HEADER="#
-# ${APP_NAME}
-#
-# Copyright (c) ${YEAR} ${AUTHOR}
-# License: MIT
-#
-"
-
-# ─────────────────────────────────────────────
-# Main script
-# ─────────────────────────────────────────────
-if [[ -n "$SRC_MAIN" ]]; then
-  msg_ok "Using template: $SRC_MAIN"
-  cp "$SRC_MAIN" "$DEST_SCRIPT"
-else
-  msg_warn "No template found — generating skeleton"
-  cat > "$DEST_SCRIPT" << 'EOF'
+HEADER=$(cat <<EOF
 #!/usr/bin/env bash
-set -Eeuo pipefail
-
-msg_info()  { echo "[INFO] $*"; }
-msg_ok()    { echo "[OK] $*"; }
-msg_error() { echo "[ERROR] $*" >&2; exit 1; }
-
-msg_info "Starting setup"
-
-# TODO:
-# - Follow docs/README.md
-# - Add dependency checks
-# - Implement install/update logic
-
-msg_ok "Completed"
+################################################################################
+# $APP_NAME
+#
+# $DESCRIPTION
+#
+# Author: $AUTHOR
+# Version: $VERSION
+################################################################################
 EOF
-fi
-
-sed -i "1s|^|$HEADER\n|" "$DEST_SCRIPT"
-chmod +x "$DEST_SCRIPT"
+)
 
 # ─────────────────────────────────────────────
-# Install script (ct)
+# Scripts
 # ─────────────────────────────────────────────
+MAIN="$DEST/${APP_SLUG}.sh"
+safe_copy_or_create "$TEMPLATE" "$MAIN" "$HEADER"
+replace_placeholders "$MAIN"
+rewrite_fork_urls "$MAIN"
+chmod +x "$MAIN"
+
 if [[ "$PROJECT_TYPE" == "ct" ]]; then
-  if [[ -n "$SRC_INSTALL" ]]; then
-    msg_ok "Using install template"
-    cp "$SRC_INSTALL" "$INSTALL_SCRIPT"
-  else
-    msg_warn "No install template — generating skeleton"
-    cat > "$INSTALL_SCRIPT" << 'EOF'
-#!/usr/bin/env bash
-set -Eeuo pipefail
-
-msg_info()  { echo "[INFO] $*"; }
-msg_ok()    { echo "[OK] $*"; }
-msg_error() { echo "[ERROR] $*" >&2; exit 1; }
-
-msg_info "Installing application"
-
-# TODO:
-# - Install dependencies
-# - Configure services
-
-msg_ok "Install complete"
-EOF
-  fi
-
-  sed -i "1s|^|$HEADER\n|" "$INSTALL_SCRIPT"
+  INSTALL_SCRIPT="$INSTALL/${APP_SLUG}-install.sh"
+  safe_copy_or_create "$INSTALL_TEMPLATE" "$INSTALL_SCRIPT" "$HEADER"
+  replace_placeholders "$INSTALL_SCRIPT"
+  rewrite_fork_urls "$INSTALL_SCRIPT"
   chmod +x "$INSTALL_SCRIPT"
 fi
 
 # ─────────────────────────────────────────────
-# Fork URL rewrite
+# JSON
 # ─────────────────────────────────────────────
-RAW_FORK="https://raw.githubusercontent.com/$GITHUB_USER/$FORK_REPO/$FEATURE_BRANCH"
+JSON="json/${APP_SLUG}.json"
+JSON_TEMPLATE="docs/contribution/templates_json/AppName.json"
 
-sed -i \
-  -e "s|https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main|$RAW_FORK|g" \
-  misc/build.func misc/install.func "$DEST_SCRIPT" 2>/dev/null || true
+[[ -f "$JSON_TEMPLATE" ]] && cp "$JSON_TEMPLATE" "$JSON" || echo "{}" > "$JSON"
 
-msg_ok "Fork URLs applied for testing"
+update_json_string "$JSON" "name" "$APP_NAME"
+update_json_string "$JSON" "slug" "$APP_SLUG"
+update_json_string "$JSON" "type" "$PROJECT_TYPE"
+update_json_string "$JSON" "description" "$DESCRIPTION"
+update_json_string "$JSON" "date_created" "$DATE_CREATED"
+update_json_field "$JSON" "updateable" "true"
+update_json_field "$JSON" "privileged" "$PRIVILEGED"
+update_json_string "$JSON" "interface_port" "$PORT"
+update_json_string "$JSON" "website" "$WEBSITE"
+update_json_string "$JSON" "documentation" "$DOCUMENTATION"
+update_json_string "$JSON" "logo" "$LOGO"
+update_json_array "$JSON" "categories" "$CATEGORIES"
+
+INSTALL_JSON="$(generate_install_methods "$SCRIPT_PATH")"
+update_json_array "$JSON" "install_methods" "$INSTALL_JSON"
+
+update_json_object "$JSON" "default_credentials" '{"username": null, "password": null}'
+update_json_array "$JSON" "notes" ""
 
 # ─────────────────────────────────────────────
-# JSON metadata
+# Validation
 # ─────────────────────────────────────────────
-cat > "json/${APP_SLUG}.json" << EOF
-{
-  "name": "${APP_NAME}",
-  "slug": "${APP_SLUG}",
-  "type": "${PROJECT_TYPE}",
-  "categories": ["utility"],
-  "updateable": true,
-  "privileged": false,
-  "description": "${APP_NAME} application"
-}
-EOF
+for field in name slug type categories description install_methods; do
+  grep -q "\"$field\"" "$JSON" || fatal "JSON missing: $field"
+done
 
-msg_ok "Project files created"
+rewrite_fork_urls misc/build.func
+rewrite_fork_urls misc/install.func
 
-echo
-echo "Next steps:"
-echo "  Test:    bash $DEST_SCRIPT"
-echo "  Cleanup: bash docs/contribution/restore-upstream.sh"
-echo "  Commit:  git add . && git commit"
-echo
+msg_ok "Project created successfully"
