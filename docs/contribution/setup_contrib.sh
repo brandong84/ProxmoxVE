@@ -286,6 +286,7 @@ ORIGIN="$(git remote get-url origin)"
 
 GITHUB_USER="${BASH_REMATCH[1]}"
 REPO="${BASH_REMATCH[2]}"
+REPO="${REPO%.git}"
 
 # ─────────────────────────────────────────────
 # Prompts
@@ -314,7 +315,7 @@ DATE_CREATED="$(date +%Y-%m-%d)"
 # ─────────────────────────────────────────────
 BRANCH="feat/${APP_SLUG}-${PROJECT_TYPE}"
 git checkout -b "$BRANCH" 2>/dev/null || true
-RAW_FORK="https://raw.githubusercontent.com/$GITHUB_USER/$REPO/$BRANCH"
+RAW_FORK="raw.githubusercontent.com/$GITHUB_USER/$REPO/$BRANCH"
 
 # ─────────────────────────────────────────────
 # Type mapping
