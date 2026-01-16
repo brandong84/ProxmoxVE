@@ -18,6 +18,7 @@
 #   ct        - LXC container application scripts
 #   vm        - Virtual machine templates
 #   pve-tool  - Proxmox host-side utilities and tools
+#   addon     - Additional tools and utilities
 #
 # GENERATED FILES (depending on project type):
 #   ct/<app>.sh                     Container creation/update script
@@ -58,13 +59,14 @@
 #
 # ------------------------------------------------------------------------------
 #
-# --type <ct|vm|pve-tool>
+# --type <ct|vm|pve|addon>
 #   Specifies the contribution project type.
 #
 #   Valid values:
 #     ct        Create an LXC container application
 #     vm        Create a virtual machine template
-#     pve-tool  Create a Proxmox host-side utility
+#     pve       Create a Proxmox host-side utility
+#     addon     Create an additional tool or utility
 #
 #   If omitted:
 #   - Defaults to: ct
@@ -148,7 +150,7 @@
 # Examples:
 #   ./setup_contrib.sh --app RomM --type ct
 #   ./setup_contrib.sh --app MyVM --type vm
-#   ./setup_contrib.sh --app BackupTool --type pve-tool --yes
+#   ./setup_contrib.sh --app BackupTool --type pve --yes
 #
 ################################################################################
 ################################################################################
@@ -160,8 +162,74 @@
 # See docs/contribution/CONTRIBUTING.md for full workflow.
 ################################################################################
 
-set -u
+set -uo pipefail
 IFS=$'\n\t'
+
+# ─────────────────────────────────────────────
+# Argument parsing and help
+# ─────────────────────────────────────────────
+APP_NAME=""
+PROJECT_TYPE=""
+NON_INTERACTIVE=false
+
+show_help() {
+  echo "ProxmoxVE Contribution Project Setup Script"
+  echo ""
+  echo "USAGE:"
+  echo "  Interactive:    ./setup_contrib.sh"
+  echo "  Non-interactive: ./setup_contrib.sh --app AppName --type ct --yes"
+  echo ""
+  echo "OPTIONS:"
+  echo "  --app <name>    Application name"
+  echo "  --type <type>   Project type (ct/vm/pve/addon)"
+  echo "  --yes           Non-interactive mode"
+  echo "  --help          Show this help"
+  echo ""
+  echo "EXAMPLES:"
+  echo "  ./setup_contrib.sh --app RomM --type ct"
+  echo "  ./setup_contrib.sh --app MyVM --type vm --yes"
+  exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --app)
+      APP_NAME="$2"
+      shift 2
+      ;;
+    --type)
+      PROJECT_TYPE="$2"
+      shift 2
+      ;;
+    --yes)
+      NON_INTERACTIVE=true
+      shift
+      ;;
+    --help|-h)
+      show_help
+      ;;
+    *)
+      echo "Unknown option: $1"
+      show_help
+      ;;
+  esac
+done
+
+# ─────────────────────────────────────────────
+# Dependency checks
+# ─────────────────────────────────────────────
+check_dependencies() {
+  local deps=("git" "sed")
+  for dep in "${deps[@]}"; do
+    if ! command -v "$dep" >/dev/null 2>&1; then
+      fatal "$dep is required but not installed"
+    fi
+  done
+  HAS_JQ=false
+  if command -v jq >/dev/null 2>&1; then
+    HAS_JQ=true
+  fi
+}
 
 # ─────────────────────────────────────────────
 # Logging
@@ -176,22 +244,43 @@ fatal() { msg_error "$1"; exit 1; }
 # Helpers
 # ─────────────────────────────────────────────
 to_slug() { echo "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9'; }
+
 to_camel() {
   local input="$1"
+  [[ -z "$input" ]] && echo "" && return
   local output=""
-  local word
-
   for word in $input; do
     output+="${word^} "
   done
-
   echo "${output% }"
 }
 
 ask() {
   local var="$1" prompt="$2" default="$3"
-  read -rp "$prompt [$default]: " input
-  eval "$var=\"${input:-$default}\""
+  if $NON_INTERACTIVE; then
+    # In non-interactive mode, use provided value or default
+    declare -g "$var=${!var:-$default}"
+    return
+  fi
+  # In interactive mode, prompt if not set
+  if [[ -z "${!var}" ]]; then
+    local input
+    read -rp "$prompt [$default]: " input
+    declare -g "$var=${input:-$default}"
+  fi
+}
+
+detect_github_info() {
+  local origin_url
+  origin_url="$(git remote get-url origin 2>/dev/null)" || fatal "Unable to get git remote origin"
+  
+  # Handle different URL formats: https, ssh, with/without .git
+  if [[ "$origin_url" =~ github\.com[\/:]([^\/]+)\/([^\/\.]+)(\.git)?$ ]]; then
+    GITHUB_USER="${BASH_REMATCH[1]}"
+    REPO="${BASH_REMATCH[2]}"
+  else
+    fatal "Unable to parse GitHub repository from origin URL: $origin_url"
+  fi
 }
 
 safe_copy_or_create() {
@@ -209,20 +298,20 @@ safe_copy_or_create() {
 replace_placeholders() {
   local file="$1"
   [[ -f "$file" ]] || return
-  sed -i \
-    -e "s/\[AppName\]/${APP_NAME}/g" \
-    -e "s/AppName/${APP_NAME}/g" \
-    -e "s/\[appname\]/${APP_SLUG}/g" \
-    -e "s/appname/${APP_SLUG}/g" \
-    "$file"
+  # Escape \ and / for sed
+  local esc_app_name=$(printf '%s\n' "$APP_NAME" | sed 's/\\/\\\\/g; s/\//\\\//g')
+  local esc_app_slug=$(printf '%s\n' "$APP_SLUG" | sed 's/\\/\\\\/g; s/\//\\\//g')
+  sed -i "s/\[AppName\]/${esc_app_name}/g" "$file"
+  sed -i "s/AppName/${esc_app_name}/g" "$file"
+  sed -i "s/\[appname\]/${esc_app_slug}/g" "$file"
+  sed -i "s/appname/${esc_app_slug}/g" "$file"
 }
 
 rewrite_fork_urls() {
   local file="$1"
   [[ -f "$file" ]] || return
-  sed -i \
-    "s|raw.githubusercontent.com/community-scripts/ProxmoxVE/main|$RAW_FORK|g" \
-    "$file"
+  local esc_raw_fork=$(printf '%s\n' "$RAW_FORK" | sed 's/\\/\\\\/g; s/#/\\#/g')
+  sed -i "s@raw.githubusercontent.com/community-scripts/ProxmoxVE/main@${esc_raw_fork}@g" "$file"
 }
 
 # ─────────────────────────────────────────────
@@ -231,30 +320,40 @@ rewrite_fork_urls() {
 json_set_string() {
   local f="$1" k="$2" v="$3"
   [[ -z "$v" ]] && return
-  sed -i -E \
-    "s|(\"$k\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"|\1\"$v\"|g" \
-    "$f"
+  if $HAS_JQ; then
+    jq --arg k "$k" --arg v "$v" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
+  else
+    local esc_v=$(printf '%s\n' "$v" | sed 's/\\/\\\\/g; s/\//\\\//g')
+    sed -i "s@\"$k\": \"[^\"]*\"@\"$k\": \"${esc_v}\"@g" "$f"
+  fi
 }
 
 json_set_bool() {
   local f="$1" k="$2" v="$3"
-  sed -i -E \
-    "s|(\"$k\"[[:space:]]*:[[:space:]]*)(true|false)|\1$v|g" \
-    "$f"
+  if $HAS_JQ; then
+    jq --arg k "$k" --argjson v "$v" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
+  else
+    sed -i "s@\"$k\": (true|false)@\"$k\": $v@g" "$f"
+  fi
 }
 
 json_set_array() {
   local f="$1" k="$2" v="$3"
-  sed -i -E \
-    "s|\"$k\"[[:space:]]*:[[:space:]]*\[[^]]*\]|\"$k\": [$v]|g" \
-    "$f"
+  if $HAS_JQ; then
+    jq --arg k "$k" --argjson v "[$v]" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
+  else
+    local esc_v=$(printf '%s\n' "$v" | sed 's/\\/\\\\/g; s/\//\\\//g')
+    sed -i "s@\"$k\": \[[^]]*\]@\"$k\": [${esc_v}]@g" "$f"
+  fi
 }
 
 json_set_object() {
   local f="$1" k="$2" v="$3"
-  sed -i -E \
-    "s|\"$k\"[[:space:]]*:[[:space:]]*\{[^}]*\}|\"$k\": $v|g" \
-    "$f"
+  if $HAS_JQ; then
+    jq --arg k "$k" --argjson v "$v" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
+  else
+    sed -i "s@\"$k\": \\{[^}]*\\}@\"$k\": $v@g" "$f"
+  fi
 }
 
 generate_install_methods() {
@@ -279,14 +378,9 @@ EOF
 # ─────────────────────────────────────────────
 # Preconditions
 # ─────────────────────────────────────────────
+check_dependencies
 [[ -d .git ]] || fatal "Run from repository root"
-
-ORIGIN="$(git remote get-url origin)"
-[[ "$ORIGIN" =~ github.com[:/](.+)/([^/]+)(\.git)?$ ]] || fatal "Unable to detect fork"
-
-GITHUB_USER="${BASH_REMATCH[1]}"
-REPO="${BASH_REMATCH[2]}"
-REPO="${REPO%.git}"
+detect_github_info
 
 # ─────────────────────────────────────────────
 # Prompts
@@ -305,7 +399,13 @@ ask DOCUMENTATION "Documentation URL (optional)" "https://docs.romm.app/latest/"
 ask CATEGORIES "Category IDs (comma separated)" "24,0"
 ask PRIVILEGED "Privileged container? (true/false)" "false"
 
+# Validation
 [[ -z "$APP_NAME" ]] && fatal "Application name is required"
+case "$PROJECT_TYPE" in
+  ct|vm|pve|addon) ;;
+  *) fatal "Invalid project type: $PROJECT_TYPE. Must be ct, vm, pve, or addon." ;;
+esac
+[[ "$PRIVILEGED" != "true" && "$PRIVILEGED" != "false" ]] && fatal "Privileged must be true or false"
 
 APP_SLUG="$(to_slug "$APP_NAME")"
 DATE_CREATED="$(date +%Y-%m-%d)"
@@ -348,6 +448,10 @@ esac
 
 mkdir -p "$DEST" "frontend/public/json" ${INSTALL:+ "$INSTALL"}
 
+# Check templates exist
+[[ -f "$TEMPLATE" ]] || fatal "Template not found: $TEMPLATE"
+[[ -n "$INSTALL_TEMPLATE" && ! -f "$INSTALL_TEMPLATE" ]] && fatal "Install template not found: $INSTALL_TEMPLATE"
+
 # ─────────────────────────────────────────────
 # Headers
 # ─────────────────────────────────────────────
@@ -389,7 +493,33 @@ JSON_DEST="$JSON_DIR/${APP_SLUG}.json"
 JSON_TEMPLATE="docs/contribution/templates_json/AppName.json"
 
 mkdir -p "$JSON_DIR"
-[[ -f "$JSON_TEMPLATE" ]] && cp "$JSON_TEMPLATE" "$JSON_DEST" || echo "{}" > "$JSON_DEST"
+if [[ -f "$JSON_TEMPLATE" ]]; then
+  cp "$JSON_TEMPLATE" "$JSON_DEST"
+else
+  cat > "$JSON_DEST" << 'EOF'
+{
+  "name": "",
+  "slug": "",
+  "type": "",
+  "description": "",
+  "date_created": "",
+  "updateable": true,
+  "privileged": false,
+  "interface_port": "",
+  "website": "",
+  "documentation": "",
+  "logo": "",
+  "categories": [],
+  "install_methods": [],
+  "script": "",
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": []
+}
+EOF
+fi
 
 json_set_string "$JSON_DEST" "name" "$APP_NAME"
 json_set_string "$JSON_DEST" "slug" "$APP_SLUG"
