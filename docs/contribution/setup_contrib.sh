@@ -405,7 +405,7 @@ json_set_array  "$JSON_DEST" "categories" "$CATEGORIES"
 
 INSTALL_JSON="$(generate_install_methods "$SCRIPT_PATH")"
 json_set_array "$JSON_DEST" "install_methods" "$INSTALL_JSON"
-
+json_set_string "$JSON_DEST" "script" "$SCRIPT_PATH"
 json_set_object "$JSON_DEST" "default_credentials" '{"username": null, "password": null}'
 json_set_array  "$JSON_DEST" "notes" ""
 
