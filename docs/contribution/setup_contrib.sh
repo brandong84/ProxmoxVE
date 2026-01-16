@@ -160,24 +160,6 @@
 # See docs/contribution/CONTRIBUTING.md for full workflow.
 ################################################################################
 
-
-
-################################################################################
-# ProxmoxVE Contribution Project Setup Script
-#
-# Creates a new contribution scaffold in a forked ProxmoxVE repository.
-# Must be run AFTER docs/contribution/setup-fork.sh
-################################################################################
-
-#!/usr/bin/env bash
-
-################################################################################
-# ProxmoxVE Contribution Project Setup Script
-#
-# Creates a new contribution scaffold in a forked ProxmoxVE repository.
-# Must be run AFTER docs/contribution/setup-fork.sh
-################################################################################
-
 set -u
 IFS=$'\n\t'
 
@@ -194,7 +176,17 @@ fatal() { msg_error "$1"; exit 1; }
 # Helpers
 # ─────────────────────────────────────────────
 to_slug() { echo "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9'; }
-to_camel() { sed 's/\b\(.\)/\u\1/g' <<<"$1"; }
+to_camel() {
+  local input="$1"
+  local output=""
+  local word
+
+  for word in $input; do
+    output+="${word^} "
+  done
+
+  echo "${output% }"
+}
 
 ask() {
   local var="$1" prompt="$2" default="$3"
@@ -206,8 +198,11 @@ safe_copy_or_create() {
   local src="$1" dest="$2" header="$3"
   if [[ -f "$src" ]]; then
     cp "$src" "$dest"
+    msg_ok "Copied template → $dest"
   else
+    msg_warn "Missing template: $src"
     echo "$header" > "$dest"
+    msg_ok "Created blank file → $dest"
   fi
 }
 
@@ -215,7 +210,9 @@ replace_placeholders() {
   local file="$1"
   [[ -f "$file" ]] || return
   sed -i \
+    -e "s/\[AppName\]/${APP_NAME}/g" \
     -e "s/AppName/${APP_NAME}/g" \
+    -e "s/\[appname\]/${APP_SLUG}/g" \
     -e "s/appname/${APP_SLUG}/g" \
     "$file"
 }
@@ -223,41 +220,50 @@ replace_placeholders() {
 rewrite_fork_urls() {
   local file="$1"
   [[ -f "$file" ]] || return
-  sed -i "s|raw.githubusercontent.com/community-scripts/ProxmoxVE/main|$RAW_FORK|g" "$file"
+  sed -i \
+    "s|raw.githubusercontent.com/community-scripts/ProxmoxVE/main|$RAW_FORK|g" \
+    "$file"
 }
 
 # ─────────────────────────────────────────────
-# JSON helpers
+# JSON helpers (SAFE)
 # ─────────────────────────────────────────────
-update_json_field() {
+json_set_string() {
   local f="$1" k="$2" v="$3"
   [[ -z "$v" ]] && return
-  if grep -q "\"$k\"" "$f"; then
-    sed -i "s|\"$k\"[[:space:]]*:[[:space:]]*[^,]*|\"$k\": $v|" "$f"
-  else
-    sed -i "s|{|\{\n  \"$k\": $v,|" "$f"
-  fi
+  sed -i -E \
+    "s|(\"$k\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"|\1\"$v\"|g" \
+    "$f"
 }
 
-update_json_string() {
-  update_json_field "$1" "$2" "\"$3\""
+json_set_bool() {
+  local f="$1" k="$2" v="$3"
+  sed -i -E \
+    "s|(\"$k\"[[:space:]]*:[[:space:]]*)(true|false)|\1$v|g" \
+    "$f"
 }
 
-update_json_array() {
-  update_json_field "$1" "$2" "[$3]"
+json_set_array() {
+  local f="$1" k="$2" v="$3"
+  sed -i -E \
+    "s|\"$k\"[[:space:]]*:[[:space:]]*\[[^]]*\]|\"$k\": [$v]|g" \
+    "$f"
 }
 
-update_json_object() {
-  update_json_field "$1" "$2" "$3"
+json_set_object() {
+  local f="$1" k="$2" v="$3"
+  sed -i -E \
+    "s|\"$k\"[[:space:]]*:[[:space:]]*\{[^}]*\}|\"$k\": $v|g" \
+    "$f"
 }
 
 generate_install_methods() {
-  local path="$1"
+  local script="$1"
   cat <<EOF
 [
   {
     "type": "default",
-    "script": "$path",
+    "script": "$script",
     "resources": {
       "cpu": 2,
       "ram": 2048,
@@ -276,7 +282,7 @@ EOF
 [[ -d .git ]] || fatal "Run from repository root"
 
 ORIGIN="$(git remote get-url origin)"
-[[ "$ORIGIN" =~ github.com[:/](.+)/([^/]+)(\.git)?$ ]] || fatal "Cannot detect fork"
+[[ "$ORIGIN" =~ github.com[:/](.+)/([^/]+)(\.git)?$ ]] || fatal "Unable to detect fork"
 
 GITHUB_USER="${BASH_REMATCH[1]}"
 REPO="${BASH_REMATCH[2]}"
@@ -284,21 +290,21 @@ REPO="${BASH_REMATCH[2]}"
 # ─────────────────────────────────────────────
 # Prompts
 # ─────────────────────────────────────────────
-DEFAULT_AUTHOR="$(to_camel "$(git config user.name || echo Unknown)")"
+DEFAULT_AUTHOR="$(to_camel "$(git config user.name 2>/dev/null || echo Unknown)")"
 
-ask APP_NAME "Application Name" ""
+ask APP_NAME "Application Name" "RomM"
 ask PROJECT_TYPE "Type (ct/vm/pve/addon)" "ct"
 ask AUTHOR "Author Name" "$DEFAULT_AUTHOR"
 ask DESCRIPTION "Description" "$APP_NAME application"
 ask VERSION "Version" "latest"
-ask PORT "Interface port (optional)" ""
-ask WEBSITE "Website (optional)" ""
-ask LOGO "Logo URL (optional)" ""
-ask DOCUMENTATION "Documentation URL (optional)" ""
-ask CATEGORIES "Category IDs (comma separated)" "0"
+ask PORT "Interface port (optional)" "8080"
+ask WEBSITE "Website (optional)" "https://romm.app/"
+ask LOGO "Logo URL (optional)" "https://docs.romm.app/latest/resources/romm/isotipo.png"
+ask DOCUMENTATION "Documentation URL (optional)" "https://docs.romm.app/latest/"
+ask CATEGORIES "Category IDs (comma separated)" "24,0"
 ask PRIVILEGED "Privileged container? (true/false)" "false"
 
-[[ -z "$APP_NAME" ]] && fatal "Application name required"
+[[ -z "$APP_NAME" ]] && fatal "Application name is required"
 
 APP_SLUG="$(to_slug "$APP_NAME")"
 DATE_CREATED="$(date +%Y-%m-%d)"
@@ -339,7 +345,7 @@ case "$PROJECT_TYPE" in
   *) fatal "Invalid type" ;;
 esac
 
-mkdir -p "$DEST" json "${INSTALL:-}"
+mkdir -p "$DEST" "frontend/public/json" ${INSTALL:+ "$INSTALL"}
 
 # ─────────────────────────────────────────────
 # Headers
@@ -377,38 +383,41 @@ fi
 # ─────────────────────────────────────────────
 # JSON
 # ─────────────────────────────────────────────
-JSON="json/${APP_SLUG}.json"
+JSON_DIR="frontend/public/json"
+JSON_DEST="$JSON_DIR/${APP_SLUG}.json"
 JSON_TEMPLATE="docs/contribution/templates_json/AppName.json"
 
-[[ -f "$JSON_TEMPLATE" ]] && cp "$JSON_TEMPLATE" "$JSON" || echo "{}" > "$JSON"
+mkdir -p "$JSON_DIR"
+[[ -f "$JSON_TEMPLATE" ]] && cp "$JSON_TEMPLATE" "$JSON_DEST" || echo "{}" > "$JSON_DEST"
 
-update_json_string "$JSON" "name" "$APP_NAME"
-update_json_string "$JSON" "slug" "$APP_SLUG"
-update_json_string "$JSON" "type" "$PROJECT_TYPE"
-update_json_string "$JSON" "description" "$DESCRIPTION"
-update_json_string "$JSON" "date_created" "$DATE_CREATED"
-update_json_field "$JSON" "updateable" "true"
-update_json_field "$JSON" "privileged" "$PRIVILEGED"
-update_json_string "$JSON" "interface_port" "$PORT"
-update_json_string "$JSON" "website" "$WEBSITE"
-update_json_string "$JSON" "documentation" "$DOCUMENTATION"
-update_json_string "$JSON" "logo" "$LOGO"
-update_json_array "$JSON" "categories" "$CATEGORIES"
+json_set_string "$JSON_DEST" "name" "$APP_NAME"
+json_set_string "$JSON_DEST" "slug" "$APP_SLUG"
+json_set_string "$JSON_DEST" "type" "$PROJECT_TYPE"
+json_set_string "$JSON_DEST" "description" "$DESCRIPTION"
+json_set_string "$JSON_DEST" "date_created" "$DATE_CREATED"
+json_set_bool   "$JSON_DEST" "updateable" "true"
+json_set_bool   "$JSON_DEST" "privileged" "$PRIVILEGED"
+json_set_string "$JSON_DEST" "interface_port" "$PORT"
+json_set_string "$JSON_DEST" "website" "$WEBSITE"
+json_set_string "$JSON_DEST" "documentation" "$DOCUMENTATION"
+json_set_string "$JSON_DEST" "logo" "$LOGO"
+json_set_array  "$JSON_DEST" "categories" "$CATEGORIES"
 
 INSTALL_JSON="$(generate_install_methods "$SCRIPT_PATH")"
-update_json_array "$JSON" "install_methods" "$INSTALL_JSON"
+json_set_array "$JSON_DEST" "install_methods" "$INSTALL_JSON"
 
-update_json_object "$JSON" "default_credentials" '{"username": null, "password": null}'
-update_json_array "$JSON" "notes" ""
+json_set_object "$JSON_DEST" "default_credentials" '{"username": null, "password": null}'
+json_set_array  "$JSON_DEST" "notes" ""
 
 # ─────────────────────────────────────────────
 # Validation
 # ─────────────────────────────────────────────
 for field in name slug type categories description install_methods; do
-  grep -q "\"$field\"" "$JSON" || fatal "JSON missing: $field"
+  grep -q "\"$field\"" "$JSON_DEST" || fatal "JSON missing required field: $field"
 done
 
 rewrite_fork_urls misc/build.func
 rewrite_fork_urls misc/install.func
 
-msg_ok "Project created successfully"
+msg_ok "Contribution project created successfully"
+
