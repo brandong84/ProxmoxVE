@@ -172,6 +172,17 @@ APP_NAME=""
 PROJECT_TYPE=""
 NON_INTERACTIVE=false
 
+# Declare variables to avoid unbound issues
+declare AUTHOR=""
+declare DESCRIPTION=""
+declare VERSION=""
+declare PORT=""
+declare WEBSITE=""
+declare LOGO=""
+declare DOCUMENTATION=""
+declare CATEGORIES=""
+declare PRIVILEGED=""
+
 show_help() {
   echo "ProxmoxVE Contribution Project Setup Script"
   echo ""
@@ -245,11 +256,13 @@ fatal() { msg_error "$1"; exit 1; }
 # ─────────────────────────────────────────────
 to_slug() { echo "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9'; }
 
-to_camel() {
+title_case() {
   local input="$1"
   [[ -z "$input" ]] && echo "" && return
   local output=""
+  local IFS=' '
   for word in $input; do
+    word="${word,,}"
     output+="${word^} "
   done
   echo "${output% }"
@@ -259,14 +272,14 @@ ask() {
   local var="$1" prompt="$2" default="$3"
   if $NON_INTERACTIVE; then
     # In non-interactive mode, use provided value or default
-    declare -g "$var=${!var:-$default}"
+    eval "$var=\${$var:-$default}"
     return
   fi
-  # In interactive mode, prompt if not set
-  if [[ -z "${!var}" ]]; then
+  # In interactive mode, prompt if empty
+  if eval "[[ -z \"\$$var\" ]]"; then
     local input
     read -rp "$prompt [$default]: " input
-    declare -g "$var=${input:-$default}"
+    eval "$var=\${input:-$default}"
   fi
 }
 
@@ -301,17 +314,19 @@ replace_placeholders() {
   # Escape \ and / for sed
   local esc_app_name=$(printf '%s\n' "$APP_NAME" | sed 's/\\/\\\\/g; s/\//\\\//g')
   local esc_app_slug=$(printf '%s\n' "$APP_SLUG" | sed 's/\\/\\\\/g; s/\//\\\//g')
-  sed -i "s/\[AppName\]/${esc_app_name}/g" "$file"
-  sed -i "s/AppName/${esc_app_name}/g" "$file"
-  sed -i "s/\[appname\]/${esc_app_slug}/g" "$file"
-  sed -i "s/appname/${esc_app_slug}/g" "$file"
+  local esc_author=$(printf '%s\n' "$AUTHOR" | sed 's/\\/\\\\/g; s/\//\\\//g')
+  sed -i "s/\[AppName\]/${esc_app_name}/g" "$file" 2>/dev/null
+  sed -i "s/AppName/${esc_app_name}/g" "$file" 2>/dev/null
+  sed -i "s/\[appname\]/${esc_app_slug}/g" "$file" 2>/dev/null
+  sed -i "s/appname/${esc_app_slug}/g" "$file" 2>/dev/null
+  sed -i "s/\[YourGitHubUsername\]/${esc_author}/g" "$file" 2>/dev/null
 }
 
 rewrite_fork_urls() {
   local file="$1"
   [[ -f "$file" ]] || return
   local esc_raw_fork=$(printf '%s\n' "$RAW_FORK" | sed 's/\\/\\\\/g; s/#/\\#/g')
-  sed -i "s@raw.githubusercontent.com/community-scripts/ProxmoxVE/main@${esc_raw_fork}@g" "$file"
+  sed -i "s@raw.githubusercontent.com/community-scripts/ProxmoxVE/main@${esc_raw_fork}@g" "$file" 2>/dev/null
 }
 
 # ─────────────────────────────────────────────
@@ -324,7 +339,7 @@ json_set_string() {
     jq --arg k "$k" --arg v "$v" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
   else
     local esc_v=$(printf '%s\n' "$v" | sed 's/\\/\\\\/g; s/\//\\\//g')
-    sed -i "s@\"$k\": \"[^\"]*\"@\"$k\": \"${esc_v}\"@g" "$f"
+    sed -i "s@\"$k\": \"[^\"]*\"@\"$k\": \"${esc_v}\"@g" "$f" 2>/dev/null
   fi
 }
 
@@ -333,17 +348,28 @@ json_set_bool() {
   if $HAS_JQ; then
     jq --arg k "$k" --argjson v "$v" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
   else
-    sed -i "s@\"$k\": (true|false)@\"$k\": $v@g" "$f"
+    sed -i "s@\"$k\": (true|false)@\"$k\": $v@g" "$f" 2>/dev/null
   fi
 }
 
 json_set_array() {
   local f="$1" k="$2" v="$3"
-  if $HAS_JQ; then
-    jq --arg k "$k" --argjson v "[$v]" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
+  if [[ "$v" == \[* ]]; then
+    # v is JSON array
+    if $HAS_JQ; then
+      jq --arg k "$k" --argjson v "$v" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
+    else
+      local esc_v=$(printf '%s\n' "$v" | sed 's/\\/\\\\/g; s/\//\\\//g')
+      sed -z -i "s@\"$k\": \[[^]]*\]@\"$k\": ${esc_v}@g" "$f" 2>/dev/null
+    fi
   else
-    local esc_v=$(printf '%s\n' "$v" | sed 's/\\/\\\\/g; s/\//\\\//g')
-    sed -i "s@\"$k\": \[[^]]*\]@\"$k\": [${esc_v}]@g" "$f"
+    # v is comma-separated values
+    if $HAS_JQ; then
+      jq --arg k "$k" --arg v "$v" '.[$k] = ($v | split(",") | map(tonumber))' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
+    else
+      local esc_v=$(printf '%s\n' "$v" | sed 's/\\/\\\\/g; s/\//\\\//g')
+      sed -z -i "s@\"$k\": \[[^]]*\]@\"$k\": [${esc_v}]@g" "$f" 2>/dev/null
+    fi
   fi
 }
 
@@ -352,27 +378,12 @@ json_set_object() {
   if $HAS_JQ; then
     jq --arg k "$k" --argjson v "$v" '.[$k] = $v' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
   else
-    sed -i "s@\"$k\": \\{[^}]*\\}@\"$k\": $v@g" "$f"
+    sed -i "s@\"$k\": \\{[^}]*\\}@\"$k\": $v@g" "$f" 2>/dev/null
   fi
 }
 
 generate_install_methods() {
-  local script="$1"
-  cat <<EOF
-[
-  {
-    "type": "default",
-    "script": "$script",
-    "resources": {
-      "cpu": 2,
-      "ram": 2048,
-      "hdd": 4,
-      "os": "debian",
-      "version": "12"
-    }
-  }
-]
-EOF
+  echo "[{\"type\": \"ct\", \"script\": \"ct/${APP_SLUG}.sh\", \"resources\": {\"cpu\": 2, \"ram\": 2048, \"hdd\": 4, \"os\": \"debian\", \"version\": \"12\"}}]"
 }
 
 # ─────────────────────────────────────────────
@@ -385,7 +396,7 @@ detect_github_info
 # ─────────────────────────────────────────────
 # Prompts
 # ─────────────────────────────────────────────
-DEFAULT_AUTHOR="$(to_camel "$(git config user.name 2>/dev/null || echo Unknown)")"
+DEFAULT_AUTHOR="$(title_case "$(git config user.name 2>/dev/null || echo Unknown)")"
 
 ask APP_NAME "Application Name" "RomM"
 ask PROJECT_TYPE "Type (ct/vm/pve/addon)" "ct"
@@ -534,9 +545,8 @@ json_set_string "$JSON_DEST" "documentation" "$DOCUMENTATION"
 json_set_string "$JSON_DEST" "logo" "$LOGO"
 json_set_array  "$JSON_DEST" "categories" "$CATEGORIES"
 
-INSTALL_JSON="$(generate_install_methods "$SCRIPT_PATH")"
+INSTALL_JSON="$(generate_install_methods)"
 json_set_array "$JSON_DEST" "install_methods" "$INSTALL_JSON"
-json_set_string "$JSON_DEST" "script" "$SCRIPT_PATH"
 json_set_object "$JSON_DEST" "default_credentials" '{"username": null, "password": null}'
 json_set_array  "$JSON_DEST" "notes" ""
 
