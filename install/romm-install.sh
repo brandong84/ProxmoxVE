@@ -210,6 +210,7 @@ msg_ok "Prepared frontend assets"
 
 msg_info "Configuring Nginx"
 mkdir -p /var/log/nginx
+mkdir -p /etc/nginx/conf.d
 mkdir -p /usr/lib/nginx/modules
 mkdir -p "$ROMM_NGINX_JS_DIR"
 cat <<'EOF' >"$ROMM_NGINX_JS_DIR/decode.js"
