@@ -1,0 +1,38 @@
+{
+  "name": "RomM",
+  "slug": "romm",
+  "categories": [13,24,0],
+  "date_created": "2026-01-17",
+  "type": "ct",
+  "updateable": true,
+  "privileged": false,
+  "interface_port": 3000,
+  "documentation": "https://github.com/rommapp/romm",
+  "website": "https://romm.app/",
+  "logo": "https://docs.romm.app/latest/resources/romm/isotipo.png",
+  "config_path": "/opt/romm/.env",
+  "description": "RomM game library manager with PostgreSQL backend (non-Docker).",
+  "install_methods": [
+    {
+      "type": "ct", 
+      "script": "ct/romm.sh", 
+      "resources": {
+        "cpu": 2, 
+        "ram": 2048, 
+        "hdd": 4, 
+        "os": "alpine", 
+        "version": "3.23"
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    "Re-run the installer to update RomM safely.",
+    "Automatic backups stored in /opt/romm-backups.",
+    "OpenRC service enabled for auto-start.",
+    "Health endpoint available at /api/health."
+  ]
+}
