@@ -8,9 +8,9 @@ source <(curl -fsSL https://raw.githubusercontent.com/brandong84/ProxmoxVE/feat/
 
 APP="RomM"
 var_tags="${var_tags:-gaming;roms}"
-var_cpu="${var_cpu:-6}"
-var_ram="${var_ram:-6144}"
-var_disk="${var_disk:-12}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-4}"
 var_os="${var_os:-alpine}"
 var_version="${var_version:-3.22}"
 var_unprivileged="${var_unprivileged:-1}"

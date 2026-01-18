@@ -121,6 +121,12 @@ msg_ok "Created RomM user"
 
 msg_info "Configuring MariaDB"
 mysql_install_db --user=mysql --basedir=/usr --datadir=/var/lib/mysql >/dev/null 2>&1
+mkdir -p /etc/my.cnf.d
+cat <<'EOF' >/etc/my.cnf.d/romm-bind.cnf
+[mysqld]
+bind-address=127.0.0.1
+skip-networking=0
+EOF
 $STD rc-update add mariadb default
 $STD rc-service mariadb start
 DB_NAME="romm"
@@ -162,6 +168,7 @@ msg_ok "Built frontend"
 msg_info "Configuring RomM"
 mkdir -p "$ROMM_BASE/library" "$ROMM_BASE/resources" "$ROMM_BASE/assets" "$ROMM_BASE/config" "$ROMM_BASE/tmp"
 mkdir -p /redis-data
+touch "$ROMM_BASE/config/config.yml"
 mkdir -p "$ROMM_ENV_DIR"
 ROMM_AUTH_SECRET_KEY=$(openssl rand -hex 32)
 cat <<EOF >"$ROMM_ENV_FILE"
@@ -604,6 +611,20 @@ start_bin_valkey-server() {
   echo "${VALKEY_PID}" >/tmp/valkey-server.pid
 }
 
+wait_for_mariadb() {
+  info_log "Waiting for MariaDB to accept connections"
+  local retries=60
+  while ((retries > 0)); do
+    if mariadb-admin ping -h 127.0.0.1 >/dev/null 2>&1; then
+      info_log "MariaDB is ready"
+      return 0
+    fi
+    sleep 1
+    ((retries--))
+  done
+  error_log "MariaDB did not become ready"
+}
+
 start_bin_rq_scheduler() {
   info_log "Starting RQ scheduler"
   RQ_REDIS_HOST=${REDIS_HOST:-127.0.0.1} \
@@ -720,6 +741,8 @@ else
   info_log "REDIS_HOST is set, not starting internal valkey-server"
 fi
 
+wait_for_mariadb
+
 info_log "Running database migrations"
 if alembic upgrade head; then
   info_log "Database migrations succeeded"
@@ -758,6 +781,7 @@ description="RomM service"
 command="/usr/local/bin/romm-init"
 command_background="yes"
 pidfile="/run/romm.pid"
+start_stop_daemon_args="--background --make-pidfile"
 
 depend() {
   need net
