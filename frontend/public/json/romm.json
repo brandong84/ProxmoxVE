@@ -21,7 +21,7 @@
         "ram": 2048, 
         "hdd": 4, 
         "os": "alpine", 
-        "version": "3.23"
+        "version": "3.22"
       }
     }
   ],
@@ -44,6 +44,15 @@
     },
     {
     "text": "Health endpoint available at /api/health.",
+    "type": "info"
+    }
+    {
+    "text": """Next steps:
+
+1)  Review and adjust romm.env for metadata provider API keys and any optional settings.
+2)  Grab DB/app secrets from romm.creds.
+3)  Verify service health with rc-service romm status
+4)  Browse to http://<CT-IP>:8080.""",
     "type": "info"
     }
   ]
