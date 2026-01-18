@@ -30,9 +30,21 @@
     "password": null
   },
   "notes": [
-    "Re-run the installer to update RomM safely.",
-    "Automatic backups stored in /opt/romm-backups.",
-    "OpenRC service enabled for auto-start.",
-    "Health endpoint available at /api/health."
+    {
+    "text": "Re-run the installer to update RomM safely.",
+    "type": "info"
+    },
+    {
+    "text": "Automatic backups stored in /opt/romm-backups.",
+    "type": "info"
+    },
+    {
+    "text": "OpenRC service enabled for auto-start.",
+    "type": "info"
+    },
+    {
+    "text": "Health endpoint available at /api/health.",
+    "type": "info"
+    }
   ]
 }
