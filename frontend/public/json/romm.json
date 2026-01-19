@@ -1,12 +1,12 @@
 {
   "name": "RomM",
   "slug": "romm",
-  "categories": [13,24,0],
+  "categories": [13, 24],
   "date_created": "2026-01-17",
   "type": "ct",
   "updateable": true,
   "privileged": false,
-  "interface_port": 3000,
+  "interface_port": 8080,
   "documentation": "https://github.com/rommapp/romm",
   "website": "https://romm.app/",
   "logo": "https://docs.romm.app/latest/resources/romm/isotipo.png",
@@ -14,13 +14,13 @@
   "description": "RomM game library manager with PostgreSQL backend (non-Docker).",
   "install_methods": [
     {
-      "type": "ct", 
-      "script": "ct/romm.sh", 
+      "type": "ct",
+      "script": "ct/romm.sh",
       "resources": {
-        "cpu": 2, 
-        "ram": 2048, 
-        "hdd": 4, 
-        "os": "alpine", 
+        "cpu": 2,
+        "ram": 2048,
+        "hdd": 4,
+        "os": "alpine",
         "version": "3.22"
       }
     }
@@ -31,29 +31,28 @@
   },
   "notes": [
     {
-    "text": "Re-run the installer to update RomM safely.",
-    "type": "info"
+      "text": "Warning: Setup will take a long time, easily 45+ minutes as the development environment is being initialized.",
+      "type": "warning"
     },
     {
-    "text": "Automatic backups stored in /opt/romm-backups.",
-    "type": "info"
+      "text": "Re-run the installer to update RomM safely.",
+      "type": "info"
     },
     {
-    "text": "OpenRC service enabled for auto-start.",
-    "type": "info"
+      "text": "Automatic backups stored in /opt/romm-backups.",
+      "type": "info"
     },
     {
-    "text": "Health endpoint available at /api/health.",
-    "type": "info"
-    }
+      "text": "OpenRC service enabled for auto-start.",
+      "type": "info"
+    },
     {
-    "text": """Next steps:
-
-1)  Review and adjust romm.env for metadata provider API keys and any optional settings.
-2)  Grab DB/app secrets from romm.creds.
-3)  Verify service health with rc-service romm status
-4)  Browse to http://<CT-IP>:8080.""",
-    "type": "info"
+      "text": "Health endpoint available at /api/health.",
+      "type": "info"
+    },
+    {
+      "text": "Next steps: \n\n\n1)  Review and adjust romm.env for metadata provider API keys and any optional settings. \n 2)  Grab DB/app secrets from romm.creds. \n3)  Verify service health with rc-service romm status \n4)  Browse to http://<CT-IP>:8080.",
+      "type": "info"
     }
   ]
 }
