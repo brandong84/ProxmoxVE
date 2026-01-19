@@ -1,0 +1,48 @@
+{
+  "name": "Template Manager",
+  "slug": "template-manager",
+  "categories": [
+    1
+  ],
+  "date_created": "2026-01-18",
+  "type": "pve",
+  "updateable": false,
+  "privileged": false,
+  "interface_port": null,
+  "documentation": "https://github.com/community-scripts/ProxmoxVE/blob/main/docs/tools/template-manager.md",
+  "website": "https://community-scripts.github.io/ProxmoxVE",
+  "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/proxmox.webp",
+  "config_path": "",
+  "description": "Create, export, import, and reuse Proxmox LXC/VM templates. Includes guided cleanup for LXC exports, template naming, compressed tarball export, import from file/URL, and optional creation of new CT/VMs from imported templates.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "tools/pve/template-manager.sh",
+      "resources": {
+        "cpu": null,
+        "ram": null,
+        "hdd": null,
+        "os": null,
+        "version": null
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "Run this tool on the Proxmox host as root.",
+      "type": "info"
+    },
+    {
+      "text": "LXC export can remove net0 and sanitize the container; ensure you understand the cleanup steps before proceeding.",
+      "type": "warning"
+    },
+    {
+      "text": "Imported .tar.gz files are placed into CT Templates storage so they appear in the Proxmox GUI.",
+      "type": "info"
+    }
+  ]
+}
