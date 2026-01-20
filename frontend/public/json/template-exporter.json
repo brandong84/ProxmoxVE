@@ -57,7 +57,7 @@
       "type": "info"
     },
     {
-      "text": "Running guests are stopped briefly to create consistent full clones.",
+      "text": "Exports stop the guest for consistency and use full clones.",
       "type": "warning"
     },
     {

@@ -287,8 +287,14 @@ parse_size_to_gb() {
 
 storage_free_gb() {
   local storage="$1"
-  local avail
+  local avail path
   avail=$(pvesm status -storage "$storage" | awk 'NR>1{print $7}')
+  if [[ -z "$avail" || "$avail" == "-" || "$avail" == "0" || "$avail" == "0.00" ]]; then
+    path=$(storage_path_from_cfg "$storage")
+    if [[ -n "$path" ]]; then
+      avail=$(df -BG --output=avail "$path" | awk 'NR==2{print $1}')
+    fi
+  fi
   parse_size_to_gb "$avail"
 }
 
@@ -367,6 +373,7 @@ get_lxc_os_version() {
 
 sanitize_lxc() {
   local ctid="$1"
+  local mode="${2:-custom}"
   local selection
 
   if ! pct status "$ctid" | grep -q "status: running"; then
@@ -374,17 +381,21 @@ sanitize_lxc() {
     exit 1
   fi
 
-  selection=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Sanitize LXC" \
-    --checklist "Select cleanup actions (login header preserved):" 22 80 12 \
-    "ssh_keys" "Remove SSH host keys" ON \
-    "machine_id" "Truncate machine-id" ON \
-    "udev_rules" "Remove persistent udev rules" ON \
-    "logs" "Clear system logs" ON \
-    "temp" "Clear /tmp and /var/tmp" ON \
-    "history" "Clear root bash history" ON \
-    "hostname" "Reset hostname files" OFF \
-    "zero_free" "Zero free space (optional, slow)" OFF \
-    3>&1 1>&2 2>&3)
+  if [[ "$mode" == "custom" ]]; then
+    selection=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Sanitize LXC" \
+      --checklist "Select cleanup actions (login header preserved):" 22 80 12 \
+      "ssh_keys" "Remove SSH host keys" ON \
+      "machine_id" "Truncate machine-id" ON \
+      "udev_rules" "Remove persistent udev rules" ON \
+      "logs" "Clear system logs" ON \
+      "temp" "Clear /tmp and /var/tmp" ON \
+      "history" "Clear root bash history" ON \
+      "hostname" "Reset hostname files" OFF \
+      "zero_free" "Zero free space (optional, slow)" OFF \
+      3>&1 1>&2 2>&3)
+  else
+    selection="ssh_keys machine_id udev_rules logs temp history"
+  fi
 
   if [[ -z "$selection" ]]; then
     msg_ok "Sanitize skipped"
@@ -438,21 +449,7 @@ sanitize_lxc() {
   msg_ok "Sanitized container"
 }
 
-select_lxc_mode() {
-  whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Export Mode" \
-    --menu "Choose export mode:" 12 60 3 \
-    "stop" "Stop container (safe)" \
-    "snapshot" "Snapshot (requires storage support)" \
-    "suspend" "Suspend (if supported)" 3>&1 1>&2 2>&3
-}
-
-select_vm_mode() {
-  whiptail --backtitle "Proxmox VE Helper Scripts" --title "VM Export Mode" \
-    --menu "Choose export mode:" 12 60 3 \
-    "snapshot" "Snapshot (preferred)" \
-    "suspend" "Suspend VM" \
-    "stop" "Stop VM" 3>&1 1>&2 2>&3
-}
+DEFAULT_EXPORT_MODE="stop"
 
 select_compression() {
   if command -v zstd >/dev/null 2>&1; then
@@ -464,6 +461,14 @@ select_compression() {
     whiptail --msgbox "zstd is not installed. Defaulting to gzip." 9 60
     echo "gzip"
   fi
+}
+
+select_cleanup_mode() {
+  whiptail --backtitle "Proxmox VE Helper Scripts" --title "Cleanup Options" \
+    --menu "Select cleanup behavior (login header preserved):" 12 70 3 \
+    "default" "Recommended cleanup (default)" \
+    "custom" "Customize cleanup steps" \
+    "skip" "Skip cleanup entirely" 3>&1 1>&2 2>&3
 }
 
 write_manifest_lxc() {
@@ -605,28 +610,24 @@ export_lxc_single() {
   local source_status
   SANITIZE_ACTIONS="none"
   local ext
-  local do_cleanup
+  local cleanup_mode
   local ostype osver name rev arch new_name default_name
 
   show_clone_notice
   source_status=$(pct status "$ctid" | awk '{print $2}')
   clone_storage=$(select_storage "rootdir" "Clone Storage")
   ensure_choice "Clone storage" "$clone_storage"
-  mode=$(select_lxc_mode)
+  mode="$DEFAULT_EXPORT_MODE"
   compress=$(select_compression)
   ensure_choice "Compression" "$compress"
   storage=$(select_storage "vztmpl" "Template Storage")
   ensure_choice "Template storage" "$storage"
+  cleanup_mode=$(select_cleanup_mode)
+  ensure_choice "Cleanup choice" "$cleanup_mode"
 
   if [[ "$source_status" != "running" && "$mode" != "stop" ]]; then
     whiptail --msgbox "Source CT is stopped. Export mode will be set to stop for consistency." 10 70
     mode="stop"
-  fi
-
-  if whiptail --yesno "Run cleanup inside the clone before export?" 10 60; then
-    do_cleanup="yes"
-  else
-    do_cleanup="no"
   fi
 
   export_id="$ctid"
@@ -640,11 +641,11 @@ export_lxc_single() {
   export_id="$temp_id"
   msg_ok "Temporary clone created: $export_id"
 
-  if [[ "$do_cleanup" == "yes" ]]; then
+  if [[ "$cleanup_mode" != "skip" ]]; then
     if ! pct status "$export_id" | grep -q "status: running"; then
       pct start "$export_id" >/dev/null 2>&1 || true
     fi
-    sanitize_lxc "$export_id"
+    sanitize_lxc "$export_id" "$cleanup_mode"
     if [[ "$source_status" != "running" ]]; then
       pct shutdown "$export_id" --timeout 60 >/dev/null 2>&1 || pct stop "$export_id" >/dev/null 2>&1 || true
     fi
@@ -827,8 +828,7 @@ export_vm_single() {
   local backup_file
 
   show_clone_notice
-  mode=$(select_vm_mode)
-  ensure_choice "Export mode" "$mode"
+  mode="$DEFAULT_EXPORT_MODE"
   compress=$(select_compression)
   ensure_choice "Compression" "$compress"
   storage=$(select_storage "backup" "Backup Storage")

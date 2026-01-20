@@ -9,6 +9,7 @@ Script: `tools/pve/template-exporter.sh`
 ### LXC Exports
 - Creates a temporary clone (on selected storage) so the source container stays usable and unmodified.
 - Optional in-container cleanup with a selectable checklist.
+- Cleanup can use recommended defaults, a custom checklist, or be skipped.
 - Removes `net0` from the export target to avoid IP conflicts in new deployments.
 - Exports a `.tar.gz` or `.tar.zst` with `vzdump` directly into CT template storage so it shows in the Proxmox GUI.
 - Compression selection: gzip or zstd.
@@ -18,7 +19,7 @@ Script: `tools/pve/template-exporter.sh`
 ### VM Exports
 - Creates a temporary clone (on selected storage) so the source VM stays usable and unmodified.
 - Exports a compressed VM backup with `vzdump` to backup storage.
-- Export mode selection: snapshot, suspend, or stop.
+- Export mode defaults to stop for consistency.
 - Compression selection: gzip or zstd.
 - Writes a `.manifest.json` and `.sha256` alongside the backup.
 - Batch export support for multiple VMs.
@@ -57,7 +58,7 @@ If the name does not follow this schema, the template may still import, but Prox
 ### 1) Export LXC as shareable archive
 1. Select a container.
 2. A temporary clone is created for export (storage is selectable). The source guest is stopped briefly to ensure a consistent full clone.
-3. Optional: sanitize the container filesystem (checklist).
+3. Optional: sanitize the container filesystem (default or custom checklist).
 4. `net0` is removed from the export target to avoid network conflicts.
 5. Export with `vzdump` to the selected `vztmpl` storage.
 6. Optional: rename using Proxmox filename format.
@@ -66,7 +67,7 @@ If the name does not follow this schema, the template may still import, but Prox
 ### 2) Export VM backup for sharing
 1. Select a VM.
 2. A temporary clone is created for export (storage is selectable).
-3. Choose export mode (snapshot, suspend, stop).
+3. Export mode defaults to stop.
 4. Export with `vzdump` to the selected `backup` storage.
 5. Generate `.manifest.json` and `.sha256`.
 
