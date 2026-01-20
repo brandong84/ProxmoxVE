@@ -57,6 +57,10 @@
       "type": "info"
     },
     {
+      "text": "Running guests are stopped briefly to create consistent full clones.",
+      "type": "warning"
+    },
+    {
       "text": "Toggle debug output in the menu to see live command output.",
       "type": "info"
     },

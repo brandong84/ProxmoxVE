@@ -557,13 +557,10 @@ create_temp_lxc_clone() {
   status=$(pct status "$source_id" | awk '{print $2}')
 
   if [[ "$status" == "running" ]]; then
-    if whiptail --yesno "Temporarily stop CT $source_id to create a full clone?" 10 70; then
-      stop_container "$source_id"
-      run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
-      run_with_progress "Starting container $source_id" pct start "$source_id"
-    else
-      run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
-    fi
+    msg_info "Stopping container $source_id for consistent clone"
+    stop_container "$source_id"
+    run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
+    run_with_progress "Starting container $source_id" pct start "$source_id"
   else
     run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
   fi
@@ -579,14 +576,9 @@ create_temp_vm_clone() {
   status=$(qm status "$source_id" | awk '{print $2}')
 
   if [[ "$status" == "running" ]]; then
-    if whiptail --yesno "Temporarily stop VM $source_id to create a full clone?" 10 70; then
-      stop_vm "$source_id"
-      stopped=1
-    else
-      msg_error "Clone requires a stopped VM. Skipping clone."
-      echo ""
-      return 0
-    fi
+    msg_info "Stopping VM $source_id for consistent clone"
+    stop_vm "$source_id"
+    stopped=1
   fi
 
   run_with_progress "Cloning VM $source_id" qm clone "$source_id" "$temp_id" --name "$temp_name" --full --storage "$storage"

@@ -56,7 +56,7 @@ If the name does not follow this schema, the template may still import, but Prox
 
 ### 1) Export LXC as shareable archive
 1. Select a container.
-2. A temporary clone is created for export (storage is selectable).
+2. A temporary clone is created for export (storage is selectable). The source guest is stopped briefly to ensure a consistent full clone.
 3. Optional: sanitize the container filesystem (checklist).
 4. `net0` is removed from the export target to avoid network conflicts.
 5. Export with `vzdump` to the selected `vztmpl` storage.
