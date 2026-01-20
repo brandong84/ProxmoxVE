@@ -304,7 +304,7 @@ parse_size_to_gb() {
 storage_free_gb() {
   local storage="$1"
   local avail path
-  avail=$(pvesm status -storage "$storage" | awk 'NR>1{print $7}')
+  avail=$(pvesm status -storage "$storage" | awk 'NR>1{print $6}')
   if [[ -z "$avail" || "$avail" == "-" || "$avail" == "0" || "$avail" == "0.00" ]]; then
     path=$(storage_path_from_cfg "$storage")
     if [[ -n "$path" ]]; then
@@ -686,8 +686,7 @@ export_lxc_single() {
 
   ostype=$(pct config "$export_id" | awk '/^ostype:/ {print $2}')
   arch=$(pct config "$export_id" | awk '/^arch:/ {print $2}')
-  osver=$(get_lxc_os_version "$export_id")
-  osver=$(whiptail --inputbox "OS version (e.g., 24.04, 12, 3.22):" 10 60 "${osver}" 3>&1 1>&2 2>&3)
+  osver=$(whiptail --inputbox "App Version (e.g., 1.0.0):" 10 60 "" 3>&1 1>&2 2>&3)
   name=$(whiptail --inputbox "Template name (identifier):" 10 60 "custom" 3>&1 1>&2 2>&3)
   rev=$(whiptail --inputbox "Revision (e.g., 1):" 10 60 "1" 3>&1 1>&2 2>&3)
   arch=${arch:-amd64}
