@@ -1,0 +1,56 @@
+{
+  "name": "LXC Network Share Manager",
+  "slug": "lxc-network-share-manager",
+  "categories": [
+    1
+  ],
+  "date_created": "2026-01-19",
+  "type": "pve",
+  "updateable": false,
+  "privileged": false,
+  "interface_port": null,
+  "documentation": "https://github.com/community-scripts/ProxmoxVE/blob/main/docs/tools/lxc-network-share-manager.md",
+  "website": "https://community-scripts.github.io/ProxmoxVE",
+  "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/proxmox.webp",
+  "config_path": "",
+  "description": "Add NFS or SMB/CIFS shares on the Proxmox host and map them into LXC containers. Includes IP validation, conflict detection, read-only options, safe permission handling, fstab backups, profiles, scheduling, and a CLI mode for install scripts.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "tools/pve/lxc-network-share-manager.sh",
+      "resources": {
+        "cpu": null,
+        "ram": null,
+        "hdd": null,
+        "os": null,
+        "version": null
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "Run this tool on the Proxmox host as root.",
+      "type": "info"
+    },
+    {
+      "text": "For unprivileged containers, host UID/GID mapping uses +100000.",
+      "type": "warning"
+    },
+    {
+      "text": "A backup of /etc/fstab is created before changes.",
+      "type": "info"
+    },
+    {
+      "text": "Permission changes are optional and default to no changes.",
+      "type": "info"
+    },
+    {
+      "text": "Conflict detection warns if a host path is already in use.",
+      "type": "info"
+    }
+  ]
+}

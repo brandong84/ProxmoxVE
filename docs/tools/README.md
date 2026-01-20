@@ -25,6 +25,7 @@ Proxmox VE management and administration tools:
 - Network configuration tools
 - Backup and recovery utilities
 - Template Exporter (LXC/VM export/import)
+- LXC Network Share Manager (NFS/SMB to LXC)
 
 ### `/tools/addon/`
 Proxmox add-ons and extensions:
