@@ -43,11 +43,11 @@ Script: `tools/pve/template-exporter.sh`
 ## Filename Schema for LXC Templates
 Proxmox uses the filename for OS detection:
 
-`<OS>-<APP_VERSION>-<NAME>_<APP_VERSION>-<REVISION>_<ARCH>.tar.gz`
+`<OS>-<OS_VERSION>-<NAME>_<APP_VERSION>-<REVISION>_<ARCH>.tar.gz`
 
 Example:
 
-`debian-1.0.0-webserver_1.0.0-1_amd64.tar.gz`
+`debian-12-webserver_1.0.0-1_amd64.tar.gz`
 
 If the name does not follow this schema, the template may still import, but Proxmox can mis-detect OS defaults.
 

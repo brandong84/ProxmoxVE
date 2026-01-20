@@ -492,7 +492,7 @@ select_cleanup_mode() {
 }
 
 write_manifest_lxc() {
-  local output="$1" source_id="$2" export_id="$3" ostype="$4" osver="$5" arch="$6" name="$7" storage="$8" sanitize="$9"
+  local output="$1" source_id="$2" export_id="$3" ostype="$4" osver="$5" arch="$6" name="$7" storage="$8" sanitize="$9" app_version="${10:-}"
   cat <<EOF >"${output}.manifest.json"
 {
   "type": "lxc",
@@ -500,6 +500,7 @@ write_manifest_lxc() {
   "export_id": "${export_id}",
   "ostype": "${ostype}",
   "os_version": "${osver}",
+  "app_version": "${app_version}",
   "arch": "${arch}",
   "template_name": "${name}",
   "storage": "${storage}",
@@ -631,7 +632,7 @@ export_lxc_single() {
   SANITIZE_ACTIONS="none"
   local ext
   local cleanup_mode
-  local ostype osver name rev arch new_name default_name
+  local ostype os_version app_version name rev arch new_name default_name
 
   show_clone_notice
   source_status=$(pct status "$ctid" | awk '{print $2}')
@@ -690,7 +691,9 @@ export_lxc_single() {
 
   ostype=$(pct config "$export_id" | awk '/^ostype:/ {print $2}')
   arch=$(pct config "$export_id" | awk '/^arch:/ {print $2}')
-  osver=$(whiptail --inputbox "App Version (e.g., 1.0.0):" 10 60 "" 3>&1 1>&2 2>&3)
+  os_version=$(get_lxc_os_version "$export_id")
+  os_version=$(whiptail --inputbox "OS Version (e.g., 24.04, 12, 3.22):" 10 60 "${os_version}" 3>&1 1>&2 2>&3)
+  app_version=$(whiptail --inputbox "App Version (e.g., 1.0.0):" 10 60 "" 3>&1 1>&2 2>&3)
   name=$(whiptail --inputbox "Template name (identifier):" 10 60 "custom" 3>&1 1>&2 2>&3)
   rev=$(whiptail --inputbox "Revision (e.g., 1):" 10 60 "1" 3>&1 1>&2 2>&3)
   arch=${arch:-amd64}
@@ -702,7 +705,7 @@ export_lxc_single() {
     ext="tar.gz"
   fi
 
-  default_name="${ostype}-${osver}-${name}_${osver}-${rev}_${arch}.${ext}"
+  default_name="${ostype}-${os_version}-${name}_${app_version}-${rev}_${arch}.${ext}"
   new_name=$(whiptail --inputbox "Confirm filename:" 10 70 "${default_name}" 3>&1 1>&2 2>&3)
   if [[ -n "$new_name" && "$new_name" != "$(basename "$backup_file")" ]]; then
     mv "$backup_file" "$template_dir/$new_name"
@@ -710,7 +713,7 @@ export_lxc_single() {
   fi
 
   checksum_file "$backup_file"
-  write_manifest_lxc "$backup_file" "$ctid" "$export_id" "$ostype" "$osver" "$arch" "$name" "$storage" "${SANITIZE_ACTIONS:-none}"
+  write_manifest_lxc "$backup_file" "$ctid" "$export_id" "$ostype" "$os_version" "$arch" "$name" "$storage" "${SANITIZE_ACTIONS:-none}" "$app_version"
 
   if [[ -n "${temp_id:-}" ]]; then
     msg_info "Removing temporary clone"
