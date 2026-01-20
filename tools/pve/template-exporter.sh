@@ -83,9 +83,9 @@ cleanup_temp_clones() {
     type="${item%%:*}"
     id="${item##*:}"
     if [[ "$type" == "lxc" ]]; then
-      pct destroy "$id" >/dev/null 2>&1 || true
+      destroy_lxc_clone "$id"
     elif [[ "$type" == "vm" ]]; then
-      qm destroy "$id" >/dev/null 2>&1 || true
+      destroy_vm_clone "$id"
     fi
   done
 }
@@ -184,6 +184,22 @@ stop_vm() {
   if ! run_with_progress_allow_fail "Stopping VM $vmid" qm shutdown "$vmid" --timeout 120; then
     run_with_progress "Force stopping VM $vmid" qm stop "$vmid"
   fi
+}
+
+destroy_lxc_clone() {
+  local ctid="$1"
+  if pct status "$ctid" 2>/dev/null | grep -q "status: running"; then
+    pct stop "$ctid" >/dev/null 2>&1 || true
+  fi
+  pct destroy "$ctid" >/dev/null 2>&1 || true
+}
+
+destroy_vm_clone() {
+  local vmid="$1"
+  if qm status "$vmid" 2>/dev/null | grep -q "running"; then
+    qm stop "$vmid" >/dev/null 2>&1 || true
+  fi
+  qm destroy "$vmid" >/dev/null 2>&1 || true
 }
 
 require_pve() {
@@ -695,7 +711,7 @@ export_lxc_single() {
 
   if [[ -n "${temp_id:-}" ]]; then
     msg_info "Removing temporary clone"
-    pct destroy "$temp_id" >/dev/null 2>&1 || true
+    destroy_lxc_clone "$temp_id"
     unregister_temp_clone "lxc" "$temp_id"
     msg_ok "Temporary clone removed"
   fi
@@ -868,7 +884,7 @@ export_vm_single() {
 
   if [[ -n "${temp_id:-}" ]]; then
     msg_info "Removing temporary clone"
-    qm destroy "$temp_id" >/dev/null 2>&1 || true
+    destroy_vm_clone "$temp_id"
     unregister_temp_clone "vm" "$temp_id"
     msg_ok "Temporary clone removed"
   fi
