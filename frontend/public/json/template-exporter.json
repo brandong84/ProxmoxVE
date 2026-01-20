@@ -69,7 +69,7 @@
       "type": "info"
     },
     {
-      "text": "Yes/no prompts use plain text input on /dev/tty; set AUTO_YES/AUTO_NO for non-interactive runs.",
+      "text": "Prompts are collected before long-running tasks to avoid hidden dialogs.",
       "type": "info"
     }
   ]

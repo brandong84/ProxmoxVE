@@ -13,8 +13,6 @@ LOG_FILE="/var/log/pve-template-exporter.log"
 TEMP_CLONES=()
 NOTICE_SHOWN=0
 DEBUG="${DEBUG:-0}"
-AUTO_YES="${AUTO_YES:-0}"
-AUTO_NO="${AUTO_NO:-0}"
 export TERM="${TERM:-xterm}"
 
 YW=$(echo "\033[33m")
@@ -52,48 +50,9 @@ EOF
   fi
 }
 
-msg_info() { echo -ne " ${HOLD} ${YW}${1}...${CL}"; log_line "INFO" "$1"; }
-msg_ok() { echo -e "${BFR} ${CM} ${GN}${1}${CL}"; log_line "OK" "$1"; }
-msg_error() { echo -e "${BFR} ${CROSS} ${RD}${1}${CL}"; log_line "ERROR" "$1"; }
-
-confirm_yesno() {
-  local msg="$1" default="${2:-no}"
-  local answer="" prompt=""
-
-  if [[ "$AUTO_YES" -eq 1 ]]; then
-    log_line "INFO" "Auto-yes: $msg"
-    return 0
-  fi
-  if [[ "$AUTO_NO" -eq 1 ]]; then
-    log_line "INFO" "Auto-no: $msg"
-    return 1
-  fi
-
-  if [[ "$default" == "yes" ]]; then
-    prompt="[Y/n]"
-  else
-    prompt="[y/N]"
-  fi
-
-  printf "\n"
-  if [[ -r /dev/tty && -w /dev/tty ]]; then
-    printf "\r\033[2K\n" >/dev/tty
-    printf "%s %s " "$msg" "$prompt" >/dev/tty
-    read -r answer </dev/tty || true
-  else
-    log_line "INFO" "No TTY available for prompt: $msg"
-  fi
-
-  case "${answer,,}" in
-    y|yes) return 0 ;;
-    n|no) return 1 ;;
-  esac
-
-  if [[ "$default" == "yes" ]]; then
-    return 0
-  fi
-  return 1
-}
+msg_info() { echo -ne " ${HOLD} ${YW}${1}...${CL}" >&2; log_line "INFO" "$1"; }
+msg_ok() { echo -e "${BFR} ${CM} ${GN}${1}${CL}" >&2; log_line "OK" "$1"; }
+msg_error() { echo -e "${BFR} ${CROSS} ${RD}${1}${CL}" >&2; log_line "ERROR" "$1"; }
 
 ensure_choice() {
   local label="$1" value="$2"
@@ -187,7 +146,7 @@ run_with_progress_allow_fail() {
 
   msg_info "$label"
   if [[ "$DEBUG" -eq 1 ]]; then
-    echo "Running: ${cmd[*]}"
+    echo "Running: ${cmd[*]}" >&2
     "${cmd[@]}" 2>&1 | tee -a "$LOG_FILE"
   else
     "${cmd[@]}" >>"$LOG_FILE" 2>&1 &
@@ -341,9 +300,7 @@ preflight_storage() {
     return 0
   fi
   if (( $(echo "$free_gb < $required_gb" | bc -l) )); then
-    if ! confirm_yesno "${label} storage (${storage}) has ${free_gb}GB free, estimate is ${required_gb}GB. Continue?" "yes"; then
-      exit 1
-    fi
+    whiptail --yesno "${label} storage (${storage}) has ${free_gb}GB free, estimate is ${required_gb}GB. Continue?" 12 70 || exit 1
   fi
 }
 
@@ -600,6 +557,8 @@ create_temp_lxc_clone() {
   temp_name="export-${source_id}-${temp_id}"
   status=$(pct status "$source_id" | awk '{print $2}')
 
+  exec 3>&1
+  exec 1>&2
   if [[ "$status" == "running" ]]; then
     msg_info "Stopping container $source_id for consistent clone"
     stop_container "$source_id"
@@ -608,6 +567,8 @@ create_temp_lxc_clone() {
   else
     run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
   fi
+  exec 1>&3
+  exec 3>&-
 
   echo "$temp_id"
 }
@@ -619,6 +580,8 @@ create_temp_vm_clone() {
   temp_name="export-${source_id}-${temp_id}"
   status=$(qm status "$source_id" | awk '{print $2}')
 
+  exec 3>&1
+  exec 1>&2
   if [[ "$status" == "running" ]]; then
     msg_info "Stopping VM $source_id for consistent clone"
     stop_vm "$source_id"
@@ -629,6 +592,8 @@ create_temp_vm_clone() {
   if [[ "$stopped" -eq 1 ]]; then
     run_with_progress "Starting VM $source_id" qm start "$source_id"
   fi
+  exec 1>&3
+  exec 3>&-
 
   echo "$temp_id"
 }
@@ -640,11 +605,30 @@ export_lxc_single() {
   local source_status
   SANITIZE_ACTIONS="none"
   local ext
+  local do_cleanup
+  local ostype osver name rev arch new_name default_name
 
   show_clone_notice
   source_status=$(pct status "$ctid" | awk '{print $2}')
   clone_storage=$(select_storage "rootdir" "Clone Storage")
   ensure_choice "Clone storage" "$clone_storage"
+  mode=$(select_lxc_mode)
+  compress=$(select_compression)
+  ensure_choice "Compression" "$compress"
+  storage=$(select_storage "vztmpl" "Template Storage")
+  ensure_choice "Template storage" "$storage"
+
+  if [[ "$source_status" != "running" && "$mode" != "stop" ]]; then
+    whiptail --msgbox "Source CT is stopped. Export mode will be set to stop for consistency." 10 70
+    mode="stop"
+  fi
+
+  if whiptail --yesno "Run cleanup inside the clone before export?" 10 60; then
+    do_cleanup="yes"
+  else
+    do_cleanup="no"
+  fi
+
   export_id="$ctid"
   msg_info "Creating temporary clone"
   temp_id=$(create_temp_lxc_clone "$ctid" "$clone_storage")
@@ -656,7 +640,7 @@ export_lxc_single() {
   export_id="$temp_id"
   msg_ok "Temporary clone created: $export_id"
 
-  if confirm_yesno "Run cleanup inside CT $export_id before export?" "no"; then
+  if [[ "$do_cleanup" == "yes" ]]; then
     if ! pct status "$export_id" | grep -q "status: running"; then
       pct start "$export_id" >/dev/null 2>&1 || true
     fi
@@ -670,20 +654,6 @@ export_lxc_single() {
   pct set "$export_id" --delete net0 >/dev/null 2>&1 || true
   msg_ok "Removed net0"
 
-  mode=$(select_lxc_mode)
-  if [[ "$source_status" != "running" && "$mode" != "stop" ]]; then
-    whiptail --msgbox "Source CT is stopped. For consistency, export mode will be set to stop." 10 70
-    mode="stop"
-  fi
-  compress=$(select_compression)
-  ensure_choice "Compression" "$compress"
-  if [[ "$compress" == "zstd" ]]; then
-    ext="tar.zst"
-  else
-    ext="tar.gz"
-  fi
-
-  storage=$(select_storage "vztmpl" "Template Storage")
   template_dir=$(get_vztmpl_dir "$storage")
   mkdir -p "$template_dir"
 
@@ -693,11 +663,10 @@ export_lxc_single() {
 
   backup_file=$(ls -t "$template_dir"/vzdump-lxc-"$export_id"-*.tar.* 2>/dev/null | head -n1)
   if [[ -z "$backup_file" ]]; then
-    msg_error "Unable to locate exported tarball."
+    msg_error "Unable to locate exported archive."
     exit 1
   fi
 
-  local ostype osver name rev arch new_name default_name
   ostype=$(pct config "$export_id" | awk '/^ostype:/ {print $2}')
   arch=$(pct config "$export_id" | awk '/^arch:/ {print $2}')
   osver=$(get_lxc_os_version "$export_id")
@@ -706,6 +675,12 @@ export_lxc_single() {
   rev=$(whiptail --inputbox "Revision (e.g., 1):" 10 60 "1" 3>&1 1>&2 2>&3)
   arch=${arch:-amd64}
   ostype=${ostype:-custom}
+
+  if [[ "$compress" == "zstd" ]]; then
+    ext="tar.zst"
+  else
+    ext="tar.gz"
+  fi
 
   default_name="${ostype}-${osver}-${name}_${osver}-${rev}_${arch}.${ext}"
   new_name=$(whiptail --inputbox "Confirm filename:" 10 70 "${default_name}" 3>&1 1>&2 2>&3)
@@ -774,7 +749,7 @@ import_lxc_template() {
     filename=$(basename "$url")
     dest="$template_dir/$filename"
     curl -fsSL "$url" -o "$dest"
-    if confirm_yesno "Attempt to download checksum from ${url}.sha256?" "yes"; then
+    if whiptail --yesno "Attempt to download checksum from ${url}.sha256?" 10 60; then
       curl -fsSL "${url}.sha256" -o "${dest}.sha256" || true
       verify_checksum "$dest"
     fi
@@ -783,7 +758,7 @@ import_lxc_template() {
 
   msg_ok "Imported template: $dest"
 
-  if confirm_yesno "Create a new container from this template now?" "no"; then
+  if whiptail --yesno "Create a new container from this template now?" 10 60; then
     create_lxc_from_template "$storage" "$dest"
   fi
 }
@@ -849,33 +824,35 @@ export_vm_single() {
   local vmid="$1"
   local storage backup_dir mode export_id temp_id clone_storage compress
   local source_status
+  local backup_file
 
   show_clone_notice
   mode=$(select_vm_mode)
   ensure_choice "Export mode" "$mode"
-  source_status=$(qm status "$vmid" | awk '{print $2}')
+  compress=$(select_compression)
+  ensure_choice "Compression" "$compress"
+  storage=$(select_storage "backup" "Backup Storage")
+  ensure_choice "Backup storage" "$storage"
   clone_storage=$(select_storage "images" "Clone Storage")
   ensure_choice "Clone storage" "$clone_storage"
-  export_id="$vmid"
 
+  source_status=$(qm status "$vmid" | awk '{print $2}')
+  if [[ "$source_status" != "running" && "$mode" != "stop" ]]; then
+    whiptail --msgbox "Source VM is stopped. Export mode will be set to stop for consistency." 10 70
+    mode="stop"
+  fi
+
+  export_id="$vmid"
   msg_info "Creating temporary clone"
   temp_id=$(create_temp_vm_clone "$vmid" "$clone_storage")
   if [[ -z "$temp_id" ]]; then
-    msg_error "Clone failed or skipped. Aborting export."
+    msg_error "Clone failed. Aborting export."
     exit 1
   fi
   register_temp_clone "vm" "$temp_id"
   export_id="$temp_id"
   msg_ok "Temporary clone created: $export_id"
 
-  if [[ "$source_status" != "running" && "$mode" != "stop" ]]; then
-    whiptail --msgbox "Source VM is stopped. For consistency, export mode will be set to stop." 10 70
-    mode="stop"
-  fi
-  compress=$(select_compression)
-  ensure_choice "Compression" "$compress"
-
-  storage=$(select_storage "backup" "Backup Storage")
   backup_dir=$(get_backup_dir "$storage")
   mkdir -p "$backup_dir"
 
@@ -883,7 +860,6 @@ export_vm_single() {
 
   run_with_progress "Exporting VM backup" vzdump "$export_id" --mode "${mode:-snapshot}" --compress "$compress" --dumpdir "$backup_dir"
 
-  local backup_file
   backup_file=$(ls -t "$backup_dir"/vzdump-qemu-"$export_id"-*.vma.* 2>/dev/null | head -n1)
   if [[ -n "$backup_file" ]]; then
     checksum_file "$backup_file"
@@ -948,7 +924,7 @@ import_vm_backup() {
     filename=$(basename "$url")
     dest="$backup_dir/$filename"
     curl -fsSL "$url" -o "$dest"
-    if confirm_yesno "Attempt to download checksum from ${url}.sha256?" "yes"; then
+    if whiptail --yesno "Attempt to download checksum from ${url}.sha256?" 10 60; then
       curl -fsSL "${url}.sha256" -o "${dest}.sha256" || true
       verify_checksum "$dest"
     fi
@@ -957,7 +933,7 @@ import_vm_backup() {
 
   msg_ok "Imported VM backup: $dest"
 
-  if confirm_yesno "Restore this backup to a new VM now?" "no"; then
+  if whiptail --yesno "Restore this backup to a new VM now?" 10 60; then
     new_vmid=$(pvesh get /cluster/nextid)
     new_vmid=$(whiptail --inputbox "New VM ID:" 10 60 "$new_vmid" 3>&1 1>&2 2>&3)
     target_storage=$(select_storage "images" "VM Storage")
