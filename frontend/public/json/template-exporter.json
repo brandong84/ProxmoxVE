@@ -13,7 +13,7 @@
   "website": "https://community-scripts.github.io/ProxmoxVE",
   "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/proxmox.webp",
   "config_path": "",
-  "description": "Export LXC archives and VM backups for sharing or migration. Uses temporary export clones, guided LXC cleanup, compression choice, filename hints, manifest and checksum output, batch export/import, and optional CT/VM creation after import.",
+  "description": "Export LXC archives and VM backups for sharing or migration. Uses temporary export clones, guided LXC cleanup, compression choice, filename hints, manifest and checksum output, and optional CT/VM creation after import.",
   "install_methods": [
     {
       "type": "default",

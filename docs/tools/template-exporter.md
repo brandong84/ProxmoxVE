@@ -14,7 +14,6 @@ Script: `tools/pve/template-exporter.sh`
 - Exports a `.tar.gz` or `.tar.zst` with `vzdump` directly into CT template storage so it shows in the Proxmox GUI.
 - Compression selection: gzip or zstd.
 - Prompts for a Proxmox-friendly filename, then writes a `.manifest.json` and `.sha256`.
-- Batch export support for multiple containers.
 
 ### VM Exports
 - Creates a temporary clone (on selected storage) so the source VM stays usable and unmodified.
@@ -22,7 +21,6 @@ Script: `tools/pve/template-exporter.sh`
 - Export mode defaults to stop for consistency.
 - Compression selection: gzip or zstd.
 - Writes a `.manifest.json` and `.sha256` alongside the backup.
-- Batch export support for multiple VMs.
 
 ### Imports and Creation
 - Import LXC templates from local paths or direct URLs into `vztmpl` storage.
@@ -71,35 +69,27 @@ If the name does not follow this schema, the template may still import, but Prox
 4. Export with `vzdump` to the selected `backup` storage.
 5. Generate `.manifest.json` and `.sha256`.
 
-### 3) Batch export LXC containers
-1. Select multiple containers.
-2. Repeat the export flow per container.
-
-### 4) Batch export VMs
-1. Select multiple VMs.
-2. Repeat the export flow per VM.
-
-### 5) Import LXC template (.tar.*)
+### 3) Import LXC template (.tar.*)
 1. Choose storage for `vztmpl`.
 2. Import from local path or URL (directory imports supported).
 3. Optional: create a new LXC immediately.
 
-### 6) Import VM backup (vma.*)
+### 4) Import VM backup (vma.*)
 1. Choose backup storage.
 2. Import from local path or URL (directory imports supported).
 3. Optional: restore to a new VM immediately.
 
-### 7) Create LXC from template
+### 5) Create LXC from template
 1. Select a template from storage.
 2. Provide CT ID, hostname, root storage, disk size, and password.
 3. Choose bridge, VLAN tag, and DHCP or static IP.
 
-### 8) Create VM from template
+### 6) Create VM from template
 1. Select a VM template.
 2. Choose new VM ID, name, and target storage.
 3. Clone to a full VM.
 
-### 9) Template catalog / cleanup
+### 7) Template catalog / cleanup
 1. Choose a storage.
 2. Select templates to remove.
 

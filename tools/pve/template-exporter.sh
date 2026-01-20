@@ -303,10 +303,14 @@ parse_size_to_gb() {
 
 storage_free_gb() {
   local storage="$1"
-  local avail path
+  local avail path type
+  type=$(pvesm status -storage "$storage" | awk 'NR>1{print $2}')
   avail=$(pvesm status -storage "$storage" | awk 'NR>1{print $6}')
-  if [[ -z "$avail" || "$avail" == "-" || "$avail" == "0" || "$avail" == "0.00" ]]; then
-    path=$(storage_path_from_cfg "$storage")
+  path=$(storage_path_from_cfg "$storage")
+
+  if [[ "$type" == "dir" && -n "$path" ]]; then
+    avail=$(df -BG --output=avail "$path" | awk 'NR==2{print $1}')
+  elif [[ -z "$avail" || "$avail" == "-" || "$avail" == "0" || "$avail" == "0.00" ]]; then
     if [[ -n "$path" ]]; then
       avail=$(df -BG --output=avail "$path" | awk 'NR==2{print $1}')
     fi
@@ -1034,30 +1038,26 @@ main_menu() {
     local choice
   choice=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Template Exporter" --menu \
       "Select an action:" 22 78 12 \
-      "D" "Toggle debug output (currently: ${DEBUG})" \
       "1" "Export LXC as shareable archive" \
       "2" "Export VM backup for sharing" \
-      "3" "Batch export LXC containers" \
-      "4" "Batch export VMs" \
-      "5" "Import LXC template (.tar.*)" \
-      "6" "Import VM backup (vma.*)" \
-      "7" "Create LXC from template" \
-      "8" "Create VM from template" \
-      "9" "Template catalog / cleanup" \
-      "10" "Exit" 3>&1 1>&2 2>&3) || exit 0
+      "3" "Import LXC template (.tar.*)" \
+      "4" "Import VM backup (vma.*)" \
+      "5" "Create LXC from template" \
+      "6" "Create VM from template" \
+      "7" "Template catalog / cleanup" \
+      "D" "Toggle debug output (currently: ${DEBUG})" \
+      "8" "Exit" 3>&1 1>&2 2>&3) || exit 0
 
     case "$choice" in
-      D) toggle_debug ;;
       1) export_lxc_single "$(pick_lxc)" ;;
       2) export_vm_single "$(pick_vm)" ;;
-      3) export_lxc_batch ;;
-      4) export_vm_batch ;;
-      5) import_lxc_template ;;
-      6) import_vm_backup ;;
-      7) create_lxc_from_gui_template ;;
-      8) create_vm_from_template ;;
-      9) template_catalog_cleanup ;;
-      10) exit 0 ;;
+      3) import_lxc_template ;;
+      4) import_vm_backup ;;
+      5) create_lxc_from_gui_template ;;
+      6) create_vm_from_template ;;
+      7) template_catalog_cleanup ;;
+      D) toggle_debug ;;
+      8) exit 0 ;;
     esac
   done
 }
