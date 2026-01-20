@@ -158,10 +158,8 @@ run_with_progress_allow_fail() {
 
   msg_info "$label"
   if [[ "$DEBUG" -eq 1 ]]; then
-    "${cmd[@]}" 2>&1 | tee -a "$LOG_FILE" &
-    local pid=$!
-    show_spinner "$pid" "$label"
-    wait "$pid"
+    echo "Running: ${cmd[*]}"
+    "${cmd[@]}" 2>&1 | tee -a "$LOG_FILE"
   else
     "${cmd[@]}" >>"$LOG_FILE" 2>&1 &
     local pid=$!

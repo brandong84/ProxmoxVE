@@ -61,7 +61,7 @@
       "type": "info"
     },
     {
-      "text": "Exports show a progress gauge (non-debug) or spinner with live output (debug).",
+      "text": "Exports show a progress gauge (non-debug) or live foreground output (debug).",
       "type": "info"
     }
   ]
