@@ -75,9 +75,11 @@ confirm_yesno() {
     prompt="[y/N]"
   fi
 
+  printf "\n"
   if [[ -r /dev/tty && -w /dev/tty ]]; then
-    printf "\n" >/dev/tty
-    read -r -p "$msg $prompt " answer </dev/tty || true
+    printf "\r\033[2K\n" >/dev/tty
+    printf "%s %s " "$msg" "$prompt" >/dev/tty
+    read -r answer </dev/tty || true
   else
     log_line "INFO" "No TTY available for prompt: $msg"
   fi
