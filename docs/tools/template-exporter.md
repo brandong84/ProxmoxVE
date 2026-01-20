@@ -54,7 +54,7 @@ If the name does not follow this schema, the template may still import, but Prox
 
 ## Menu Actions
 
-### 1) Export LXC as shareable .tar.gz
+### 1) Export LXC as shareable archive
 1. Select a container.
 2. A temporary clone is created for export (storage is selectable).
 3. Optional: sanitize the container filesystem (checklist).
@@ -123,6 +123,10 @@ The login header file `/etc/profile.d/00_lxc-details.sh` is preserved and is not
 ## Reports and Cleanup
 - Each export shows a summary with path, size, checksum, and manifest.
 - Temporary clones are removed after export, and also cleaned up on failure.
+
+## Debug and Progress
+- Toggle debug output from the main menu to show live command output in the terminal.
+- Non-debug mode uses a progress gauge; debug mode shows a spinner with live output.
 
 ## Example Workflows
 

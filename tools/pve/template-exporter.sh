@@ -12,6 +12,7 @@ HEADER_FILE="$SCRIPT_DIR/../headers/template-exporter"
 LOG_FILE="/var/log/pve-template-exporter.log"
 TEMP_CLONES=()
 NOTICE_SHOWN=0
+DEBUG="${DEBUG:-0}"
 
 YW=$(echo "\033[33m")
 BL=$(echo "\033[36m")
@@ -105,6 +106,97 @@ show_clone_notice() {
   if [[ "$NOTICE_SHOWN" -eq 0 ]]; then
     whiptail --msgbox "Exports create a temporary clone and remove it after export. The source guest is not modified." 10 72
     NOTICE_SHOWN=1
+  fi
+}
+
+toggle_debug() {
+  if [[ "$DEBUG" -eq 0 ]]; then
+    DEBUG=1
+    whiptail --msgbox "Debug output enabled. Commands will print to the screen." 9 60
+  else
+    DEBUG=0
+    whiptail --msgbox "Debug output disabled. Commands will log to ${LOG_FILE} only." 9 68
+  fi
+}
+
+show_spinner() {
+  local pid="$1" label="$2"
+  local spin='|/-\\'
+  local i=0
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    printf "\r %s %s" "${spin:i++%4:1}" "$label"
+    sleep 0.2
+  done
+  printf "\r"
+}
+
+show_gauge() {
+  local pid="$1" label="$2"
+  local percent=0
+  local frames='|/-\\'
+  local i=0
+  {
+    while kill -0 "$pid" >/dev/null 2>&1; do
+      percent=$(( (percent + 3) % 100 ))
+      echo "XXX"
+      echo "$percent"
+      echo "${label} ${frames:i++%4:1}"
+      echo "XXX"
+      sleep 0.3
+    done
+    echo "XXX"
+    echo "100"
+    echo "${label} done"
+    echo "XXX"
+  } | whiptail --gauge "$label" 8 70 0
+}
+
+run_with_progress_allow_fail() {
+  local label="$1"
+  shift
+  local cmd=("$@")
+
+  msg_info "$label"
+  if [[ "$DEBUG" -eq 1 ]]; then
+    "${cmd[@]}" 2>&1 | tee -a "$LOG_FILE" &
+    local pid=$!
+    show_spinner "$pid" "$label"
+    wait "$pid"
+  else
+    "${cmd[@]}" >>"$LOG_FILE" 2>&1 &
+    local pid=$!
+    show_gauge "$pid" "$label"
+    wait "$pid"
+  fi
+
+  local status=$?
+  if [[ "$status" -ne 0 ]]; then
+    msg_error "${label} failed"
+    return "$status"
+  fi
+  msg_ok "$label"
+  return 0
+}
+
+run_with_progress() {
+  local label="$1"
+  shift
+  if ! run_with_progress_allow_fail "$label" "$@"; then
+    exit 1
+  fi
+}
+
+stop_container() {
+  local ctid="$1"
+  if ! run_with_progress_allow_fail "Stopping container $ctid" pct shutdown "$ctid" --timeout 120; then
+    run_with_progress "Force stopping container $ctid" pct stop "$ctid"
+  fi
+}
+
+stop_vm() {
+  local vmid="$1"
+  if ! run_with_progress_allow_fail "Stopping VM $vmid" qm shutdown "$vmid" --timeout 120; then
+    run_with_progress "Force stopping VM $vmid" qm stop "$vmid"
   fi
 }
 
@@ -379,7 +471,7 @@ select_vm_mode() {
 select_compression() {
   if command -v zstd >/dev/null 2>&1; then
     whiptail --backtitle "Proxmox VE Helper Scripts" --title "Compression" \
-      --menu "Choose compression:" 12 60 3 \
+      --menu "Select compression format:" 12 60 3 \
       "gzip" "Gzip (portable)" \
       "zstd" "Zstd (faster)" 3>&1 1>&2 2>&3
   else
@@ -480,15 +572,15 @@ create_temp_lxc_clone() {
   status=$(pct status "$source_id" | awk '{print $2}')
 
   if [[ "$status" == "running" ]]; then
-    if whiptail --yesno "Stop CT $source_id briefly to create a full clone?" 10 70; then
-      pct shutdown "$source_id" --timeout 120 >/dev/null 2>&1 || pct stop "$source_id" >/dev/null 2>&1
-      pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage" >/dev/null
-      pct start "$source_id" >/dev/null 2>&1 || true
+    if whiptail --yesno "Temporarily stop CT $source_id to create a full clone?" 10 70; then
+      stop_container "$source_id"
+      run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
+      run_with_progress "Starting container $source_id" pct start "$source_id"
     else
-      pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage" >/dev/null
+      run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
     fi
   else
-    pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage" >/dev/null
+    run_with_progress "Cloning container $source_id" pct clone "$source_id" "$temp_id" --hostname "$temp_name" --full --storage "$storage"
   fi
 
   echo "$temp_id"
@@ -502,8 +594,8 @@ create_temp_vm_clone() {
   status=$(qm status "$source_id" | awk '{print $2}')
 
   if [[ "$status" == "running" ]]; then
-    if whiptail --yesno "Stop VM $source_id briefly to create a full clone?" 10 70; then
-      qm shutdown "$source_id" --timeout 120 >/dev/null 2>&1 || qm stop "$source_id" >/dev/null 2>&1
+    if whiptail --yesno "Temporarily stop VM $source_id to create a full clone?" 10 70; then
+      stop_vm "$source_id"
       stopped=1
     else
       msg_error "Clone requires a stopped VM. Skipping clone."
@@ -512,9 +604,9 @@ create_temp_vm_clone() {
     fi
   fi
 
-  qm clone "$source_id" "$temp_id" --name "$temp_name" --full --storage "$storage" >/dev/null
+  run_with_progress "Cloning VM $source_id" qm clone "$source_id" "$temp_id" --name "$temp_name" --full --storage "$storage"
   if [[ "$stopped" -eq 1 ]]; then
-    qm start "$source_id" >/dev/null 2>&1 || true
+    run_with_progress "Starting VM $source_id" qm start "$source_id"
   fi
 
   echo "$temp_id"
@@ -576,9 +668,7 @@ export_lxc_single() {
 
   preflight_storage "$storage" "$(lxc_rootfs_gb "$export_id")" "Template"
 
-  msg_info "Exporting LXC (vzdump)"
-  vzdump "$export_id" --mode "$mode" --compress "$compress" --dumpdir "$template_dir" >/dev/null
-  msg_ok "Export completed"
+  run_with_progress "Exporting LXC archive" vzdump "$export_id" --mode "$mode" --compress "$compress" --dumpdir "$template_dir"
 
   backup_file=$(ls -t "$template_dir"/vzdump-lxc-"$export_id"-*.tar.* 2>/dev/null | head -n1)
   if [[ -z "$backup_file" ]]; then
@@ -597,7 +687,7 @@ export_lxc_single() {
   ostype=${ostype:-custom}
 
   default_name="${ostype}-${osver}-${name}_${osver}-${rev}_${arch}.${ext}"
-  new_name=$(whiptail --inputbox "Suggested filename:" 10 70 "${default_name}" 3>&1 1>&2 2>&3)
+  new_name=$(whiptail --inputbox "Confirm filename:" 10 70 "${default_name}" 3>&1 1>&2 2>&3)
   if [[ -n "$new_name" && "$new_name" != "$(basename "$backup_file")" ]]; then
     mv "$backup_file" "$template_dir/$new_name"
     backup_file="$template_dir/$new_name"
@@ -636,13 +726,13 @@ import_lxc_template() {
   template_dir=$(get_vztmpl_dir "$storage")
   mkdir -p "$template_dir"
 
-  method=$(whiptail --title "Import Method" --menu "Choose import method:" 12 60 2 \
+  method=$(whiptail --title "Import Method" --menu "Select import source:" 12 60 2 \
     "file" "Copy from local path" \
     "url" "Download from URL" 3>&1 1>&2 2>&3)
 
   case "$method" in
   file)
-    source=$(whiptail --inputbox "Full path to .tar.* (file or directory):" 10 70 "" 3>&1 1>&2 2>&3)
+    source=$(whiptail --inputbox "Full path to template (.tar.*) file or directory:" 10 76 "" 3>&1 1>&2 2>&3)
     if [[ -d "$source" ]]; then
       for f in "$source"/*.tar.*; do
         [[ -f "$f" ]] || continue
@@ -659,7 +749,7 @@ import_lxc_template() {
     verify_checksum "$dest"
     ;;
   url)
-    url=$(whiptail --inputbox "Direct URL to .tar.*:" 10 70 "" 3>&1 1>&2 2>&3)
+    url=$(whiptail --inputbox "Direct URL to template (.tar.*):" 10 76 "" 3>&1 1>&2 2>&3)
     filename=$(basename "$url")
     dest="$template_dir/$filename"
     curl -fsSL "$url" -o "$dest"
@@ -699,8 +789,8 @@ create_lxc_from_template() {
   ctid=$(whiptail --inputbox "Container ID:" 10 60 "$ctid" 3>&1 1>&2 2>&3)
   hostname=$(whiptail --inputbox "Hostname:" 10 60 "ct-$ctid" 3>&1 1>&2 2>&3)
   root_storage=$(select_storage "rootdir" "RootFS Storage")
-  disk_size=$(whiptail --inputbox "Disk size (GB):" 10 60 "8" 3>&1 1>&2 2>&3)
-  password=$(whiptail --passwordbox "Root password:" 10 60 3>&1 1>&2 2>&3)
+  disk_size=$(whiptail --inputbox "Root disk size (GB):" 10 60 "8" 3>&1 1>&2 2>&3)
+  password=$(whiptail --passwordbox "Set root password:" 10 60 3>&1 1>&2 2>&3)
   if [[ -z "$password" ]]; then
     msg_error "Password cannot be empty."
     exit 1
@@ -770,9 +860,7 @@ export_vm_single() {
 
   preflight_storage "$storage" "$(vm_total_disk_gb "$export_id")" "Backup"
 
-  msg_info "Exporting VM backup"
-  vzdump "$export_id" --mode "${mode:-snapshot}" --compress "$compress" --dumpdir "$backup_dir" >/dev/null
-  msg_ok "VM backup created in $backup_dir"
+  run_with_progress "Exporting VM backup" vzdump "$export_id" --mode "${mode:-snapshot}" --compress "$compress" --dumpdir "$backup_dir"
 
   local backup_file
   backup_file=$(ls -t "$backup_dir"/vzdump-qemu-"$export_id"-*.vma.* 2>/dev/null | head -n1)
@@ -812,13 +900,13 @@ import_vm_backup() {
   backup_dir=$(get_backup_dir "$storage")
   mkdir -p "$backup_dir"
 
-  method=$(whiptail --title "Import Method" --menu "Choose import method:" 12 60 2 \
+  method=$(whiptail --title "Import Method" --menu "Select import source:" 12 60 2 \
     "file" "Copy from local path" \
     "url" "Download from URL" 3>&1 1>&2 2>&3)
 
   case "$method" in
   file)
-    source=$(whiptail --inputbox "Full path to backup (file or directory):" 10 70 "" 3>&1 1>&2 2>&3)
+    source=$(whiptail --inputbox "Full path to backup file or directory:" 10 70 "" 3>&1 1>&2 2>&3)
     if [[ -d "$source" ]]; then
       for f in "$source"/*.vma.*; do
         [[ -f "$f" ]] || continue
@@ -932,9 +1020,10 @@ main_menu() {
   while true; do
     header_info
     local choice
-    choice=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Template Exporter" --menu \
+  choice=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Template Exporter" --menu \
       "Select an action:" 22 78 12 \
-      "1" "Export LXC as shareable .tar.gz" \
+      "D" "Toggle debug output (currently: ${DEBUG})" \
+      "1" "Export LXC as shareable archive" \
       "2" "Export VM backup for sharing" \
       "3" "Batch export LXC containers" \
       "4" "Batch export VMs" \
@@ -946,6 +1035,7 @@ main_menu() {
       "10" "Exit" 3>&1 1>&2 2>&3) || exit 0
 
     case "$choice" in
+      D) toggle_debug ;;
       1) export_lxc_single "$(pick_lxc)" ;;
       2) export_vm_single "$(pick_vm)" ;;
       3) export_lxc_batch ;;
