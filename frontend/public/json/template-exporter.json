@@ -1,0 +1,60 @@
+{
+  "name": "Template Exporter",
+  "slug": "template-exporter",
+  "categories": [
+    1
+  ],
+  "date_created": "2026-01-18",
+  "type": "pve",
+  "updateable": false,
+  "privileged": false,
+  "interface_port": null,
+  "documentation": "https://github.com/community-scripts/ProxmoxVE/blob/main/docs/tools/template-exporter.md",
+  "website": "https://community-scripts.github.io/ProxmoxVE",
+  "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/proxmox.webp",
+  "config_path": "",
+  "description": "Export LXC tarballs and VM backups for sharing or migration. Uses temporary export clones, guided LXC cleanup, compression choice, filename hints, manifest and checksum output, batch export/import, and optional CT/VM creation after import.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "tools/pve/template-exporter.sh",
+      "resources": {
+        "cpu": null,
+        "ram": null,
+        "hdd": null,
+        "os": null,
+        "version": null
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "Run this tool on the Proxmox host as root.",
+      "type": "info"
+    },
+    {
+      "text": "LXC export can remove net0 and sanitize the container; review the cleanup checklist before proceeding.",
+      "type": "warning"
+    },
+    {
+      "text": "Imported .tar.gz files are placed into CT Templates storage so they appear in the Proxmox GUI.",
+      "type": "info"
+    },
+    {
+      "text": "The LXC login header file (/etc/profile.d/00_lxc-details.sh) is preserved during sanitize operations.",
+      "type": "info"
+    },
+    {
+      "text": "Exports run against a temporary clone so the source guest remains usable and unchanged.",
+      "type": "info"
+    },
+    {
+      "text": "Choose clone storage and compression (gzip/zstd) during export.",
+      "type": "info"
+    }
+  ]
+}

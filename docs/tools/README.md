@@ -24,6 +24,7 @@ Proxmox VE management and administration tools:
 - Storage management tools
 - Network configuration tools
 - Backup and recovery utilities
+- Template Exporter (LXC/VM export/import)
 
 ### `/tools/addon/`
 Proxmox add-ons and extensions:
