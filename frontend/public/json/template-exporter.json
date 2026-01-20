@@ -67,6 +67,10 @@
     {
       "text": "Exports show a progress gauge (non-debug) or live foreground output (debug).",
       "type": "info"
+    },
+    {
+      "text": "Yes/no prompts use plain text input on /dev/tty; set AUTO_YES/AUTO_NO for non-interactive runs.",
+      "type": "info"
     }
   ]
 }

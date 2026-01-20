@@ -127,6 +127,8 @@ The login header file `/etc/profile.d/00_lxc-details.sh` is preserved and is not
 ## Debug and Progress
 - Toggle debug output from the main menu to show live command output in the terminal.
 - Non-debug mode uses a progress gauge; debug mode runs commands in the foreground.
+- Yes/no prompts use plain text input on `/dev/tty` to avoid hidden dialogs.
+- Set `AUTO_YES=1` or `AUTO_NO=1` for non-interactive defaults.
 
 ## Example Workflows
 

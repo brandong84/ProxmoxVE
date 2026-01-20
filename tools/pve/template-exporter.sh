@@ -13,6 +13,9 @@ LOG_FILE="/var/log/pve-template-exporter.log"
 TEMP_CLONES=()
 NOTICE_SHOWN=0
 DEBUG="${DEBUG:-0}"
+AUTO_YES="${AUTO_YES:-0}"
+AUTO_NO="${AUTO_NO:-0}"
+export TERM="${TERM:-xterm}"
 
 YW=$(echo "\033[33m")
 BL=$(echo "\033[36m")
@@ -52,6 +55,43 @@ EOF
 msg_info() { echo -ne " ${HOLD} ${YW}${1}...${CL}"; log_line "INFO" "$1"; }
 msg_ok() { echo -e "${BFR} ${CM} ${GN}${1}${CL}"; log_line "OK" "$1"; }
 msg_error() { echo -e "${BFR} ${CROSS} ${RD}${1}${CL}"; log_line "ERROR" "$1"; }
+
+confirm_yesno() {
+  local msg="$1" default="${2:-no}"
+  local answer="" prompt=""
+
+  if [[ "$AUTO_YES" -eq 1 ]]; then
+    log_line "INFO" "Auto-yes: $msg"
+    return 0
+  fi
+  if [[ "$AUTO_NO" -eq 1 ]]; then
+    log_line "INFO" "Auto-no: $msg"
+    return 1
+  fi
+
+  if [[ "$default" == "yes" ]]; then
+    prompt="[Y/n]"
+  else
+    prompt="[y/N]"
+  fi
+
+  if [[ -r /dev/tty && -w /dev/tty ]]; then
+    printf "\n" >/dev/tty
+    read -r -p "$msg $prompt " answer </dev/tty || true
+  else
+    log_line "INFO" "No TTY available for prompt: $msg"
+  fi
+
+  case "${answer,,}" in
+    y|yes) return 0 ;;
+    n|no) return 1 ;;
+  esac
+
+  if [[ "$default" == "yes" ]]; then
+    return 0
+  fi
+  return 1
+}
 
 ensure_choice() {
   local label="$1" value="$2"
@@ -299,7 +339,9 @@ preflight_storage() {
     return 0
   fi
   if (( $(echo "$free_gb < $required_gb" | bc -l) )); then
-    whiptail --yesno "${label} storage (${storage}) has ${free_gb}GB free, estimate is ${required_gb}GB. Continue?" 12 70 || exit 1
+    if ! confirm_yesno "${label} storage (${storage}) has ${free_gb}GB free, estimate is ${required_gb}GB. Continue?" "yes"; then
+      exit 1
+    fi
   fi
 }
 
@@ -612,7 +654,7 @@ export_lxc_single() {
   export_id="$temp_id"
   msg_ok "Temporary clone created: $export_id"
 
-  if whiptail --yesno "Run cleanup inside CT $export_id before export?" 10 60; then
+  if confirm_yesno "Run cleanup inside CT $export_id before export?" "no"; then
     if ! pct status "$export_id" | grep -q "status: running"; then
       pct start "$export_id" >/dev/null 2>&1 || true
     fi
@@ -730,7 +772,7 @@ import_lxc_template() {
     filename=$(basename "$url")
     dest="$template_dir/$filename"
     curl -fsSL "$url" -o "$dest"
-    if whiptail --yesno "Attempt to download checksum from ${url}.sha256?" 10 60; then
+    if confirm_yesno "Attempt to download checksum from ${url}.sha256?" "yes"; then
       curl -fsSL "${url}.sha256" -o "${dest}.sha256" || true
       verify_checksum "$dest"
     fi
@@ -739,7 +781,7 @@ import_lxc_template() {
 
   msg_ok "Imported template: $dest"
 
-  if whiptail --yesno "Create a new container from this template now?" 10 60; then
+  if confirm_yesno "Create a new container from this template now?" "no"; then
     create_lxc_from_template "$storage" "$dest"
   fi
 }
@@ -904,7 +946,7 @@ import_vm_backup() {
     filename=$(basename "$url")
     dest="$backup_dir/$filename"
     curl -fsSL "$url" -o "$dest"
-    if whiptail --yesno "Attempt to download checksum from ${url}.sha256?" 10 60; then
+    if confirm_yesno "Attempt to download checksum from ${url}.sha256?" "yes"; then
       curl -fsSL "${url}.sha256" -o "${dest}.sha256" || true
       verify_checksum "$dest"
     fi
@@ -913,7 +955,7 @@ import_vm_backup() {
 
   msg_ok "Imported VM backup: $dest"
 
-  if whiptail --yesno "Restore this backup to a new VM now?" 10 60; then
+  if confirm_yesno "Restore this backup to a new VM now?" "no"; then
     new_vmid=$(pvesh get /cluster/nextid)
     new_vmid=$(whiptail --inputbox "New VM ID:" 10 60 "$new_vmid" 3>&1 1>&2 2>&3)
     target_storage=$(select_storage "images" "VM Storage")
