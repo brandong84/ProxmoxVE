@@ -147,16 +147,16 @@ sed -i '6a #include <unistd.h>' \
   /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzlib.c \
   /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzread.c \
   /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzwrite.c
-make -C /tmp/RALibretro HAVE_CHD=1 -f /tmp/RALibretro/Makefile.RAHasher
-install -m 0755 /tmp/RALibretro/bin64/RAHasher /usr/bin/RAHasher
+$STD make -C /tmp/RALibretro HAVE_CHD=1 -f /tmp/RALibretro/Makefile.RAHasher
+$STD install -m 0755 /tmp/RALibretro/bin64/RAHasher /usr/bin/RAHasher
 rm -rf /tmp/RALibretro
 msg_ok "Built RAHasher"
 
 msg_info "Installing backend dependencies"
 cd "$ROMM_HOME"
-/usr/local/bin/uv python install 3.13
-/usr/local/bin/uv venv --python 3.13
-/usr/local/bin/uv sync --locked --no-cache
+$STD /usr/local/bin/uv python install 3.13
+$STD /usr/local/bin/uv venv --python 3.13
+$STD /usr/local/bin/uv sync --locked --no-cache
 msg_ok "Installed backend dependencies"
 
 msg_info "Building frontend"
@@ -415,9 +415,9 @@ if [[ ! -f /usr/lib/nginx/modules/ngx_http_zip_module.so ]]; then
   git -C /tmp/mod_zip checkout a9f9afa441117831cc712a832c98408b3f0416f6
   git clone --branch "release-${NGINX_VERSION}" --depth 1 https://github.com/nginx/nginx.git /tmp/nginx-src
   cd /tmp/nginx-src
-  ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
-  make -f ./objs/Makefile modules
-  install -m 0644 ./objs/ngx_http_zip_module.so /usr/lib/nginx/modules/
+  $STD ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
+  $STD make -f ./objs/Makefile modules
+  $STD install -m 0644 ./objs/ngx_http_zip_module.so /usr/lib/nginx/modules/
   cd /
   rm -rf /tmp/mod_zip /tmp/nginx-src
   $STD apk del .romm-nginx-build
