@@ -20,6 +20,29 @@ variables
 color
 catch_errors
 
+check_container_storage() {
+  local target="/boot"
+  if ! df -P "$target" >/dev/null 2>&1; then
+    target="/"
+  fi
+  local df_line total_size used_size usage
+  df_line=$(df -P "$target" | awk 'NR==2{print $2" "$3}')
+  read -r total_size used_size <<<"$df_line"
+  if [[ -z "${total_size:-}" || -z "${used_size:-}" || "$total_size" -eq 0 ]]; then
+    return 0
+  fi
+  usage=$((100 * used_size / total_size))
+  if ((usage > 80)); then
+    echo -e "${INFO}${HOLD} ${YWB}Warning: Storage is dangerously low (${usage}%).${CL}"
+    echo -ne "Continue anyway? <y/N>  "
+    read -r prompt
+    if [[ ! ${prompt,,} =~ ^(y|yes)$ ]]; then
+      echo -e "${CROSS}${HOLD}${YWB}Exiting based on user input.${CL}"
+      exit 1
+    fi
+  fi
+}
+
 function update_script() {
   header_info
   check_container_storage
