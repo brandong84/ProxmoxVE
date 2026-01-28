@@ -411,9 +411,9 @@ if [[ ! -f /usr/lib/nginx/modules/ngx_http_zip_module.so ]]; then
     pcre-dev \
     zlib-dev
   NGINX_VERSION=$(nginx -v 2>&1 | awk -F/ '{print $2}')
-  git clone https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
-  git -C /tmp/mod_zip checkout a9f9afa441117831cc712a832c98408b3f0416f6
-  git clone --branch "release-${NGINX_VERSION}" --depth 1 https://github.com/nginx/nginx.git /tmp/nginx-src
+  $STD git -c advice.detachedHead=false clone --quiet https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
+  $STD git -C /tmp/mod_zip checkout -q a9f9afa441117831cc712a832c98408b3f0416f6
+  $STD git -c advice.detachedHead=false clone --branch "release-${NGINX_VERSION}" --depth 1 --quiet https://github.com/nginx/nginx.git /tmp/nginx-src
   cd /tmp/nginx-src
   $STD ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
   $STD make -f ./objs/Makefile modules
