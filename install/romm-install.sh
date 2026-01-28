@@ -141,7 +141,7 @@ EOF
 msg_ok "Configured MariaDB"
 
 msg_info "Building RAHasher"
-git clone --recursive --branch 1.8.1 --depth 1 https://github.com/RetroAchievements/RALibretro.git /tmp/RALibretro
+$STD git -c advice.detachedHead=false clone --recursive --branch 1.8.1 --depth 1 --quiet https://github.com/RetroAchievements/RALibretro.git /tmp/RALibretro
 sed -i '22a #include <ctime>' /tmp/RALibretro/src/Util.h
 sed -i '6a #include <unistd.h>' \
   /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzlib.c \
