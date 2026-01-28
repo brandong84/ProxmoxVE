@@ -11,6 +11,32 @@ verb_ip6
 catch_errors
 setting_up_container
 network_check
+wait_for_network() {
+  local retries=5
+  local ok=false
+  msg_info "Waiting for network connectivity"
+  while [[ $retries -gt 0 ]]; do
+    if ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1 || ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+      if getent hosts dl-cdn.alpinelinux.org >/dev/null 2>&1; then
+        ok=true
+        break
+      fi
+    fi
+    retries=$((retries - 1))
+    sleep 2
+  done
+  if [[ "$ok" == true ]]; then
+    msg_ok "Network is ready"
+    return 0
+  fi
+  msg_warn "Network/DNS not ready after retries"
+  echo -ne "Continue anyway? <y/N>  "
+  read -r prompt
+  if [[ ! ${prompt,,} =~ ^(y|yes)$ ]]; then
+    exit 1
+  fi
+}
+wait_for_network
 update_os
 
 APP="RomM"

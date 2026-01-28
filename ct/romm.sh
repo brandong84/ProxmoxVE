@@ -47,6 +47,29 @@ function update_script() {
   header_info
   check_container_storage
   check_container_resources
+  msg_info "Waiting for network connectivity"
+  local retries=5
+  local ok=false
+  while [[ $retries -gt 0 ]]; do
+    if ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1 || ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+      if getent hosts dl-cdn.alpinelinux.org >/dev/null 2>&1; then
+        ok=true
+        break
+      fi
+    fi
+    retries=$((retries - 1))
+    sleep 2
+  done
+  if [[ "$ok" == true ]]; then
+    msg_ok "Network is ready"
+  else
+    msg_warn "Network/DNS not ready after retries"
+    echo -ne "Continue anyway? <y/N>  "
+    read -r prompt
+    if [[ ! ${prompt,,} =~ ^(y|yes)$ ]]; then
+      exit 1
+    fi
+  fi
 
   if [[ ! -d /opt/romm ]]; then
     msg_error "No ${APP} Installation Found!"
