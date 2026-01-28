@@ -14,6 +14,7 @@ var_disk="${var_disk:-4}"
 var_os="${var_os:-alpine}"
 var_version="${var_version:-3.22}"
 var_unprivileged="${var_unprivileged:-1}"
+STD="${STD:-silent}"
 
 header_info "$APP"
 variables
@@ -144,9 +145,9 @@ function update_script() {
 
   msg_info "Updating backend dependencies"
   cd /opt/romm || exit 1
-  silent /usr/local/bin/uv python install 3.13
-  silent /usr/local/bin/uv venv --python 3.13
-  silent /usr/local/bin/uv sync --locked --no-cache
+  $STD /usr/local/bin/uv python install 3.13
+  $STD /usr/local/bin/uv venv --python 3.13
+  $STD /usr/local/bin/uv sync --locked --no-cache
   msg_ok "Updated backend dependencies"
 
   msg_info "Rebuilding frontend"

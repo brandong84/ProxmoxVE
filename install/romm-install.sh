@@ -9,6 +9,10 @@ source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
+STD="${STD:-silent}"
+if [[ -n ${INSTALL_LOG:-} ]]; then
+  msg_info "Installer log: ${INSTALL_LOG}"
+fi
 setting_up_container
 network_check
 wait_for_network() {
@@ -166,23 +170,26 @@ FLUSH PRIVILEGES;
 EOF
 msg_ok "Configured MariaDB"
 
-msg_info "Building RAHasher"
-silent git -c advice.detachedHead=false clone --recursive --branch 1.8.1 --depth 1 --quiet https://github.com/RetroAchievements/RALibretro.git /tmp/RALibretro
-sed -i '22a #include <ctime>' /tmp/RALibretro/src/Util.h
+fetch_and_deploy_gh_release "RetroAchievements" "RetroAchievements/RALibretro" "prebuild" "latest" "/opt/RALibretro" "RAHasher-x64-Linux-*.zip"
+
+msg_info "Building RAHasher (RetroAchievements)"
+cd /opt/RALibretro
+sed -i '22a #include <ctime>' ./src/Util.h
 sed -i '6a #include <unistd.h>' \
-  /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzlib.c \
-  /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzread.c \
-  /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzwrite.c
-silent make -C /tmp/RALibretro HAVE_CHD=1 -f /tmp/RALibretro/Makefile.RAHasher
-silent install -m 0755 /tmp/RALibretro/bin64/RAHasher /usr/bin/RAHasher
-rm -rf /tmp/RALibretro
+  ./src/libchdr/deps/zlib-1.3.1/gzlib.c \
+  ./src/libchdr/deps/zlib-1.3.1/gzread.c \
+  ./src/libchdr/deps/zlib-1.3.1/gzwrite.c
+$STD make HAVE_CHD=1 -f ./Makefile.RAHasher
+$STD install -m 0755 ./bin64/RAHasher /usr/bin/RAHasher
+cd /tmp
+rm -rf /opt/RALibretro
 msg_ok "Built RAHasher"
 
 msg_info "Installing backend dependencies"
 cd "$ROMM_HOME"
-silent /usr/local/bin/uv python install 3.13
-silent /usr/local/bin/uv venv --python 3.13
-silent /usr/local/bin/uv sync --locked --no-cache
+$STD /usr/local/bin/uv python install 3.13
+$STD /usr/local/bin/uv venv --python 3.13
+$STD /usr/local/bin/uv sync --locked --no-cache
 msg_ok "Installed backend dependencies"
 
 msg_info "Building frontend"
@@ -437,13 +444,13 @@ if [[ ! -f /usr/lib/nginx/modules/ngx_http_zip_module.so ]]; then
     pcre-dev \
     zlib-dev
   NGINX_VERSION=$(nginx -v 2>&1 | awk -F/ '{print $2}')
-  silent git -c advice.detachedHead=false clone --quiet https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
-  silent git -C /tmp/mod_zip checkout -q a9f9afa441117831cc712a832c98408b3f0416f6
-  silent git -c advice.detachedHead=false clone --branch "release-${NGINX_VERSION}" --depth 1 --quiet https://github.com/nginx/nginx.git /tmp/nginx-src
+  $STD env GIT_TERMINAL_PROMPT=0 git -c advice.detachedHead=false clone --quiet https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
+  $STD env GIT_TERMINAL_PROMPT=0 git -C /tmp/mod_zip checkout -q a9f9afa441117831cc712a832c98408b3f0416f6
+  $STD env GIT_TERMINAL_PROMPT=0 git -c advice.detachedHead=false clone --branch "release-${NGINX_VERSION}" --depth 1 --quiet https://github.com/nginx/nginx.git /tmp/nginx-src
   cd /tmp/nginx-src
-  silent ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
-  silent make -f ./objs/Makefile modules
-  silent install -m 0644 ./objs/ngx_http_zip_module.so /usr/lib/nginx/modules/
+  $STD ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
+  $STD make -f ./objs/Makefile modules
+  $STD install -m 0644 ./objs/ngx_http_zip_module.so /usr/lib/nginx/modules/
   cd /
   rm -rf /tmp/mod_zip /tmp/nginx-src
   $STD apk del .romm-nginx-build
@@ -832,3 +839,6 @@ msg_ok "Started RomM"
 
 motd_ssh
 customize
+if [[ -n ${INSTALL_LOG:-} ]]; then
+  msg_ok "Log saved to: ${INSTALL_LOG}"
+fi
