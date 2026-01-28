@@ -9,8 +9,6 @@ source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
-VERBOSE="${VERBOSE:-no}"
-set_std_mode
 setting_up_container
 network_check
 update_os
@@ -143,22 +141,22 @@ EOF
 msg_ok "Configured MariaDB"
 
 msg_info "Building RAHasher"
-$STD git -c advice.detachedHead=false clone --recursive --branch 1.8.1 --depth 1 --quiet https://github.com/RetroAchievements/RALibretro.git /tmp/RALibretro
+silent git -c advice.detachedHead=false clone --recursive --branch 1.8.1 --depth 1 --quiet https://github.com/RetroAchievements/RALibretro.git /tmp/RALibretro
 sed -i '22a #include <ctime>' /tmp/RALibretro/src/Util.h
 sed -i '6a #include <unistd.h>' \
   /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzlib.c \
   /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzread.c \
   /tmp/RALibretro/src/libchdr/deps/zlib-1.3.1/gzwrite.c
-$STD make -C /tmp/RALibretro HAVE_CHD=1 -f /tmp/RALibretro/Makefile.RAHasher
-$STD install -m 0755 /tmp/RALibretro/bin64/RAHasher /usr/bin/RAHasher
+silent make -C /tmp/RALibretro HAVE_CHD=1 -f /tmp/RALibretro/Makefile.RAHasher
+silent install -m 0755 /tmp/RALibretro/bin64/RAHasher /usr/bin/RAHasher
 rm -rf /tmp/RALibretro
 msg_ok "Built RAHasher"
 
 msg_info "Installing backend dependencies"
 cd "$ROMM_HOME"
-$STD /usr/local/bin/uv python install 3.13
-$STD /usr/local/bin/uv venv --python 3.13
-$STD /usr/local/bin/uv sync --locked --no-cache
+silent /usr/local/bin/uv python install 3.13
+silent /usr/local/bin/uv venv --python 3.13
+silent /usr/local/bin/uv sync --locked --no-cache
 msg_ok "Installed backend dependencies"
 
 msg_info "Building frontend"
@@ -413,13 +411,13 @@ if [[ ! -f /usr/lib/nginx/modules/ngx_http_zip_module.so ]]; then
     pcre-dev \
     zlib-dev
   NGINX_VERSION=$(nginx -v 2>&1 | awk -F/ '{print $2}')
-  $STD git -c advice.detachedHead=false clone --quiet https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
-  $STD git -C /tmp/mod_zip checkout -q a9f9afa441117831cc712a832c98408b3f0416f6
-  $STD git -c advice.detachedHead=false clone --branch "release-${NGINX_VERSION}" --depth 1 --quiet https://github.com/nginx/nginx.git /tmp/nginx-src
+  silent git -c advice.detachedHead=false clone --quiet https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
+  silent git -C /tmp/mod_zip checkout -q a9f9afa441117831cc712a832c98408b3f0416f6
+  silent git -c advice.detachedHead=false clone --branch "release-${NGINX_VERSION}" --depth 1 --quiet https://github.com/nginx/nginx.git /tmp/nginx-src
   cd /tmp/nginx-src
-  $STD ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
-  $STD make -f ./objs/Makefile modules
-  $STD install -m 0644 ./objs/ngx_http_zip_module.so /usr/lib/nginx/modules/
+  silent ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
+  silent make -f ./objs/Makefile modules
+  silent install -m 0644 ./objs/ngx_http_zip_module.so /usr/lib/nginx/modules/
   cd /
   rm -rf /tmp/mod_zip /tmp/nginx-src
   $STD apk del .romm-nginx-build
