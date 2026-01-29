@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/brandong84/ProxmoxVE/feat/romm-ct/misc/build.func)
+source <(curl -fsSL https://raw.githubusercontent.com/brandong84/ProxmoxVE/feat/network-share-manager/misc/build.func)
 #source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Brandon Groves
@@ -14,7 +14,6 @@ var_disk="${var_disk:-4}"
 var_os="${var_os:-alpine}"
 var_version="${var_version:-3.22}"
 var_unprivileged="${var_unprivileged:-1}"
-STD="${STD:-silent}"
 
 header_info "$APP"
 variables

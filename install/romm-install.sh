@@ -9,7 +9,6 @@ source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
-STD="${STD:-silent}"
 if [[ -n ${INSTALL_LOG:-} ]]; then
   msg_info "Installer log: ${INSTALL_LOG}"
 fi
