@@ -169,10 +169,10 @@ FLUSH PRIVILEGES;
 EOF
 msg_ok "Configured MariaDB"
 
-fetch_and_deploy_gh_release "RetroAchievements" "RetroAchievements/RALibretro" "prebuild" "latest" "/opt/RALibretro" "RAHasher-x64-Linux-*.zip"
-
 msg_info "Building RAHasher (RetroAchievements)"
-cd /opt/RALibretro
+$STD git -c advice.detachedHead=false clone --depth 1 --recurse-submodules --shallow-submodules --quiet \
+  https://github.com/RetroAchievements/RALibretro.git /tmp/RALibretro
+cd /tmp/RALibretro
 sed -i '22a #include <ctime>' ./src/Util.h
 sed -i '6a #include <unistd.h>' \
   ./src/libchdr/deps/zlib-1.3.1/gzlib.c \
@@ -181,7 +181,7 @@ sed -i '6a #include <unistd.h>' \
 $STD make HAVE_CHD=1 -f ./Makefile.RAHasher
 $STD install -m 0755 ./bin64/RAHasher /usr/bin/RAHasher
 cd /tmp
-rm -rf /opt/RALibretro
+rm -rf /tmp/RALibretro
 msg_ok "Built RAHasher"
 
 msg_info "Installing backend dependencies"
@@ -443,9 +443,9 @@ if [[ ! -f /usr/lib/nginx/modules/ngx_http_zip_module.so ]]; then
     pcre-dev \
     zlib-dev
   NGINX_VERSION=$(nginx -v 2>&1 | awk -F/ '{print $2}')
-  $STD env GIT_TERMINAL_PROMPT=0 git -c advice.detachedHead=false clone --quiet https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
-  $STD env GIT_TERMINAL_PROMPT=0 git -C /tmp/mod_zip checkout -q a9f9afa441117831cc712a832c98408b3f0416f6
-  $STD env GIT_TERMINAL_PROMPT=0 git -c advice.detachedHead=false clone --branch "release-${NGINX_VERSION}" --depth 1 --quiet https://github.com/nginx/nginx.git /tmp/nginx-src
+  $STD git -c advice.detachedHead=false clone --quiet https://github.com/evanmiller/mod_zip.git /tmp/mod_zip
+  $STD git -C /tmp/mod_zip checkout -q a9f9afa441117831cc712a832c98408b3f0416f6
+  $STD git -c advice.detachedHead=false clone --branch "release-${NGINX_VERSION}" --depth 1 --quiet https://github.com/nginx/nginx.git /tmp/nginx-src
   cd /tmp/nginx-src
   $STD ./auto/configure --with-compat --add-dynamic-module=/tmp/mod_zip/
   $STD make -f ./objs/Makefile modules
