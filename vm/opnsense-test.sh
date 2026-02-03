@@ -72,7 +72,7 @@ DEFAULT_VMID=$(pvesh get /cluster/nextid 2>/dev/null || echo "100")
 DEFAULT_CORES="2"
 DEFAULT_RAM="2048"
 DEFAULT_DISK="20G"
-DEFAULT_WAN_BRIDGE="vmbr0"
+DEFAULT_WAN_BRIDGE="vmbr5"
 DEFAULT_LAN_BRIDGE="vmbr1"
 DEFAULT_HOSTNAME="opnsense"
 DEFAULT_DOMAIN="localdomain"
@@ -81,7 +81,7 @@ DEFAULT_LAN_IP="192.168.1.1"
 DEFAULT_LAN_SUBNET="24"
 DEFAULT_DHCP_START="192.168.1.100"
 DEFAULT_DHCP_END="192.168.1.199"
-DEFAULT_WAN_IF="vtnet3"
+DEFAULT_WAN_IF="vtnet5"
 DEFAULT_LAN_IF="vtnet1"
 DEFAULT_ROOT_HASH='$2y$10$YRVoF4SgskIsrXOvOQjGieB9XqHPRra9R7d80B3BZdbY/j21TwBfS'
 
@@ -179,11 +179,18 @@ qm create "$VMID" \
   --net0 "virtio,bridge=$WAN_BRIDGE,firewall=1" \
   --net1 "virtio,bridge=$LAN_BRIDGE,firewall=1" \
   --scsihw virtio-scsi-pci \
-  --scsi0 "$DISK_STORAGE:$DISK_SIZE" \
   --ide2 "$ISO_STORAGE:iso/$ISO_FILENAME,media=cdrom" \
   --boot "order=ide2;scsi0" \
   --serial0 socket \
   --vga serial0
+
+msg_info "Allocating system disk on $DISK_STORAGE ($DISK_SIZE)"
+ROOT_VOL=$(pvesm alloc "$DISK_STORAGE" "$VMID" "vm-$VMID-disk-0" "$DISK_SIZE" 2>/dev/null || true)
+if [[ -z "$ROOT_VOL" ]]; then
+  msg_error "Failed to allocate system disk on $DISK_STORAGE."
+  exit 1
+fi
+qm set "$VMID" --scsi0 "$ROOT_VOL" >/dev/null
 
 CONFIG_DIR="/var/lib/vz/images/$VMID"
 CONFIG_XML="$CONFIG_DIR/opnsense-config.xml"
